@@ -99,6 +99,9 @@ fn handle(mut stream: TcpStream) -> Result<(), KafkaError> {
     // - correlation id
     buffer.put_i32(correlation_id);
 
+    // API Response, field error
+    buffer.put_i16(35);
+
     let response = buffer.freeze();
     stream.write_all(&response).map_err(KafkaError::IOError)?;
     stream.flush().map_err(KafkaError::IOError)?;
