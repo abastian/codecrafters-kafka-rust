@@ -3,6 +3,7 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
+    thread,
 };
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -26,9 +27,11 @@ fn main() {
         match stream {
             Ok(stream) => {
                 println!("accepted new connection");
-                if let Err(err) = handle(stream) {
-                    println!("error while handle stream: {}", err);
-                }
+                thread::spawn(|| {
+                    if let Err(err) = handle(stream) {
+                        println!("error while handle stream: {}", err);
+                    }
+                });
             }
             Err(err) => {
                 println!("error while listening: {}", err);
