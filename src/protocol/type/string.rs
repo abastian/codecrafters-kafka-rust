@@ -4,8 +4,8 @@ use crate::protocol::{self, Readable, Writable};
 
 use super::{read_unsigned_varint, write_unsigned_varint};
 
-pub struct String(pub Bytes);
-impl Readable for String {
+pub struct KafkaString(pub Bytes);
+impl Readable for KafkaString {
     fn read(buffer: &mut impl bytes::Buf) -> Result<Self, protocol::Error> {
         let sz = buffer.get_i16();
         if sz < 0 {
@@ -18,7 +18,7 @@ impl Readable for String {
         }
     }
 }
-impl Writable for String {
+impl Writable for KafkaString {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
         let sz = self.0.len() as i16;
         buffer.put_i16(sz);
@@ -26,8 +26,8 @@ impl Writable for String {
     }
 }
 
-pub struct CompactString(pub Bytes);
-impl Readable for CompactString {
+pub struct CompactKafkaString(pub Bytes);
+impl Readable for CompactKafkaString {
     fn read(buffer: &mut impl bytes::Buf) -> Result<Self, protocol::Error> {
         let sz = read_unsigned_varint(buffer)?;
         if sz == 0 {
@@ -41,7 +41,7 @@ impl Readable for CompactString {
         }
     }
 }
-impl Writable for CompactString {
+impl Writable for CompactKafkaString {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
         let sz = self.0.len();
         let sz = sz as u32 + 1;
@@ -50,8 +50,8 @@ impl Writable for CompactString {
     }
 }
 
-pub struct NullableString(pub Option<Bytes>);
-impl Readable for NullableString {
+pub struct NullableKafkaString(pub Option<Bytes>);
+impl Readable for NullableKafkaString {
     fn read(buffer: &mut impl bytes::Buf) -> Result<Self, protocol::Error> {
         let sz = buffer.get_i16();
         if sz < 0 {
@@ -62,7 +62,7 @@ impl Readable for NullableString {
         Ok(Self(Some(value)))
     }
 }
-impl Writable for NullableString {
+impl Writable for NullableKafkaString {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
         match &self.0 {
             Some(data) => {

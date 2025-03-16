@@ -1,24 +1,23 @@
 use std::collections::HashMap;
-use std::string::String as StdString;
 
 use bytes::{BufMut, BytesMut};
 
 use crate::protocol::{
     self,
-    r#type::{CompactArray, CompactString, Int16, TaggedField, TaggedFields},
+    r#type::{CompactArray, CompactKafkaString, Int16, TaggedField, TaggedFields},
     Readable, Writable,
 };
 
 pub struct V3Request {
-    client_software_name: StdString,
-    client_software_version: StdString,
+    client_software_name: String,
+    client_software_version: String,
 }
 impl Readable for V3Request {
     fn read(buffer: &mut impl bytes::Buf) -> Result<Self, protocol::Error> {
         let client_software_name =
-            std::str::from_utf8(CompactString::read(buffer)?.0.as_ref())?.to_owned();
+            std::str::from_utf8(CompactKafkaString::read(buffer)?.0.as_ref())?.to_owned();
         let client_software_version =
-            std::str::from_utf8(CompactString::read(buffer)?.0.as_ref())?.to_owned();
+            std::str::from_utf8(CompactKafkaString::read(buffer)?.0.as_ref())?.to_owned();
         let _tagged_fields = TaggedFields::read(buffer)?;
 
         Ok(Self {
@@ -49,7 +48,7 @@ impl SupportedFeatureKey {
 }
 impl Writable for &SupportedFeatureKey {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
-        CompactString({
+        CompactKafkaString({
             let mut data = BytesMut::with_capacity(self.name.len());
             data.put_slice(self.name.as_bytes());
             data.freeze()
@@ -99,7 +98,7 @@ impl FinalizedFeatureKey {
 }
 impl Writable for &FinalizedFeatureKey {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
-        CompactString({
+        CompactKafkaString({
             let mut data = BytesMut::with_capacity(self.name.len());
             data.put_slice(self.name.as_bytes());
             data.freeze()
