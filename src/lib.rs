@@ -4,17 +4,17 @@ use protocol::message::api_versions::{ApiKeyItem, FinalizedFeatureKey, Supported
 
 pub mod protocol;
 
-pub static SUPPORTED_APIS: LazyLock<HashMap<i16, ApiKeyItem>> = LazyLock::new(|| {
+pub(crate) static SUPPORTED_APIS: LazyLock<HashMap<i16, ApiKeyItem>> = LazyLock::new(|| {
     let mut res = HashMap::new();
-    res.insert(18, ApiKeyItem::new(18, 3, 4));
+    res.insert(18, ApiKeyItem::new(18, 0, 4));
 
     res
 });
 
-pub static SUPPORTED_FEATURES: LazyLock<HashMap<String, SupportedFeatureKey>> =
+pub(crate) static SUPPORTED_FEATURES: LazyLock<HashMap<String, SupportedFeatureKey>> =
     LazyLock::new(HashMap::new);
 
-pub static FINALIZED_FEATURES_EPOCH: LazyLock<Option<i64>> = LazyLock::new(|| None);
+pub(crate) static FINALIZED_FEATURES_EPOCH: LazyLock<Option<i64>> = LazyLock::new(|| None);
 
-pub static FINALIZED_FEATURES: LazyLock<HashMap<String, FinalizedFeatureKey>> =
+pub(crate) static FINALIZED_FEATURES: LazyLock<HashMap<String, FinalizedFeatureKey>> =
     LazyLock::new(HashMap::new);

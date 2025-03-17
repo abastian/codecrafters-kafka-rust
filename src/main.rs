@@ -7,14 +7,10 @@ use std::{
 };
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use codecrafters_kafka::{
-    protocol::{
-        self,
-        message::ApiVersions,
-        r#type::{NullableKafkaString, TaggedFields},
-        Readable, Writable,
-    },
-    FINALIZED_FEATURES, FINALIZED_FEATURES_EPOCH, SUPPORTED_APIS, SUPPORTED_FEATURES,
+use codecrafters_kafka::protocol::{
+    self,
+    r#type::{NullableKafkaString, TaggedFields},
+    Readable, Writable,
 };
 
 fn main() {
@@ -93,28 +89,10 @@ fn handle(mut stream: TcpStream) -> Result<(), KafkaError> {
 
         let response_data = match request_api_key {
             18 => {
-                let supported_apis = &SUPPORTED_APIS;
-                let supported_features = &SUPPORTED_FEATURES;
-                let finalized_features = &FINALIZED_FEATURES;
-                let api_versions = match protocol::message::read_api_versions_request(
+                let api_versions = protocol::message::process_api_versions_request(
                     &mut buffer,
                     request_api_version,
-                ) {
-                    Ok(_) => ApiVersions::success(
-                        supported_apis,
-                        0,
-                        supported_features,
-                        *FINALIZED_FEATURES_EPOCH,
-                        finalized_features,
-                        false,
-                    ),
-                    Err(err) => match err {
-                        protocol::Error::UnsupportedVersion => ApiVersions::error(35),
-                        protocol::Error::IllegalArgument(_) | protocol::Error::Utf8Error(_) => {
-                            ApiVersions::error(2)
-                        }
-                    },
-                };
+                );
 
                 let mut buffer = BytesMut::with_capacity(16);
                 api_versions.write(&mut buffer);

@@ -1,12 +1,22 @@
 use std::collections::HashMap;
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 
-use crate::protocol::{
-    self,
-    r#type::{CompactArray, CompactKafkaString, Int16, TaggedField, TaggedFields},
-    Readable, Writable,
+use crate::{
+    protocol::{
+        self,
+        r#type::{CompactArray, CompactKafkaString, Int16, TaggedField, TaggedFields},
+        Readable, Writable,
+    },
+    FINALIZED_FEATURES, FINALIZED_FEATURES_EPOCH, SUPPORTED_APIS, SUPPORTED_FEATURES,
 };
+
+pub struct V0Request;
+impl Readable for V0Request {
+    fn read(_buffer: &mut impl bytes::Buf) -> Result<Self, protocol::Error> {
+        Ok(V0Request)
+    }
+}
 
 pub struct V3Request {
     client_software_name: String,
@@ -28,6 +38,9 @@ impl Readable for V3Request {
 }
 
 pub enum Request {
+    V0(V0Request),
+    V1(V0Request),
+    V2(V0Request),
     V3(V3Request),
     V4(V3Request),
 }
@@ -109,7 +122,82 @@ impl Writable for &FinalizedFeatureKey {
     }
 }
 
-pub enum ApiVersions<'a> {
+pub enum V0Response<'a> {
+    Error(i16),
+    Success {
+        api_keys: &'a HashMap<i16, ApiKeyItem>,
+    },
+}
+impl<'a> V0Response<'a> {
+    pub fn error(error_code: i16) -> Self {
+        Self::Error(error_code)
+    }
+
+    pub fn success(api_keys: &'a HashMap<i16, ApiKeyItem>) -> Self {
+        Self::Success { api_keys }
+    }
+}
+impl<'a> Writable for V0Response<'a> {
+    fn write(&self, buffer: &mut impl bytes::BufMut) {
+        match self {
+            V0Response::Error(error_code) => {
+                buffer.put_i16(*error_code);
+                buffer.put_u8(0); // api_keys
+            }
+            V0Response::Success { api_keys } => {
+                buffer.put_i16(0); // error_code
+                CompactArray {
+                    data: Some(api_keys.values().collect::<Vec<_>>()),
+                }
+                .write(buffer);
+            }
+        }
+    }
+}
+
+pub enum V1Response<'a> {
+    Error(i16),
+    Success {
+        api_keys: &'a HashMap<i16, ApiKeyItem>,
+        throttle_time_ms: i32,
+    },
+}
+impl<'a> V1Response<'a> {
+    pub fn error(error_code: i16) -> Self {
+        Self::Error(error_code)
+    }
+
+    pub fn success(api_keys: &'a HashMap<i16, ApiKeyItem>, throttle_time_ms: i32) -> Self {
+        Self::Success {
+            api_keys,
+            throttle_time_ms,
+        }
+    }
+}
+impl<'a> Writable for V1Response<'a> {
+    fn write(&self, buffer: &mut impl bytes::BufMut) {
+        match self {
+            V1Response::Error(error_code) => {
+                buffer.put_i16(*error_code);
+                buffer.put_u8(0); // api_keys
+                buffer.put_i32(0); // throttle_time_ms
+            }
+            V1Response::Success {
+                api_keys,
+                throttle_time_ms,
+            } => {
+                buffer.put_i16(0); // error_code
+                CompactArray {
+                    data: Some(api_keys.values().collect::<Vec<_>>()),
+                }
+                .write(buffer);
+                buffer.put_i32(*throttle_time_ms);
+            }
+        }
+    }
+}
+
+pub enum V3Response<'a> {
     Error(i16),
     Success {
         api_keys: &'a HashMap<i16, ApiKeyItem>,
@@ -121,7 +209,7 @@ pub enum ApiVersions<'a> {
         zk_migration_ready: bool,
     },
 }
-impl<'a> ApiVersions<'a> {
+impl<'a> V3Response<'a> {
     pub fn error(error_code: i16) -> Self {
         Self::Error(error_code)
     }
@@ -144,16 +232,16 @@ impl<'a> ApiVersions<'a> {
         }
     }
 }
-impl<'a> Writable for ApiVersions<'a> {
+impl<'a> Writable for V3Response<'a> {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
         match self {
-            ApiVersions::Error(error_code) => {
+            V3Response::Error(error_code) => {
                 buffer.put_i16(*error_code);
                 buffer.put_u8(0); // api_keys
                 buffer.put_i32(0); // throttle_time_ms
                 buffer.put_u8(0); // empty _tagged_fields
             }
-            ApiVersions::Success {
+            V3Response::Success {
                 api_keys,
                 throttle_time_ms,
                 supported_features,
@@ -221,6 +309,75 @@ impl<'a> Writable for ApiVersions<'a> {
 }
 
 pub enum Response<'a> {
-    V3(ApiVersions<'a>),
-    V4(ApiVersions<'a>),
+    V0(V0Response<'a>),
+    V1(V1Response<'a>),
+    V2(V1Response<'a>),
+    V3(V3Response<'a>),
+    V4(V3Response<'a>),
+}
+impl<'a> Writable for Response<'a> {
+    fn write(&self, buffer: &mut impl bytes::BufMut) {
+        match self {
+            Response::V0(resp) => resp.write(buffer),
+            Response::V1(resp) => resp.write(buffer),
+            Response::V2(resp) => resp.write(buffer),
+            Response::V3(resp) => resp.write(buffer),
+            Response::V4(resp) => resp.write(buffer),
+        }
+    }
+}
+
+pub fn process_api_versions_request(buffer: &mut impl Buf, version: i16) -> Response {
+    match version {
+        0 => {
+            if V0Request::read(buffer).is_err() {
+                Response::V0(V0Response::error(2))
+            } else {
+                Response::V0(V0Response::success(&SUPPORTED_APIS))
+            }
+        }
+        1 => {
+            if V0Request::read(buffer).is_err() {
+                Response::V1(V1Response::error(2))
+            } else {
+                Response::V1(V1Response::success(&SUPPORTED_APIS, 0))
+            }
+        }
+        2 => {
+            if V0Request::read(buffer).is_err() {
+                Response::V2(V1Response::error(2))
+            } else {
+                Response::V2(V1Response::success(&SUPPORTED_APIS, 0))
+            }
+        }
+        3 => {
+            if V3Request::read(buffer).is_err() {
+                Response::V3(V3Response::error(2))
+            } else {
+                Response::V3(V3Response::success(
+                    &SUPPORTED_APIS,
+                    0,
+                    &SUPPORTED_FEATURES,
+                    *FINALIZED_FEATURES_EPOCH,
+                    &FINALIZED_FEATURES,
+                    false,
+                ))
+            }
+        }
+        4 => {
+            if V3Request::read(buffer).is_err() {
+                Response::V4(V3Response::error(2))
+            } else {
+                Response::V4(V3Response::success(
+                    &SUPPORTED_APIS,
+                    0,
+                    &SUPPORTED_FEATURES,
+                    *FINALIZED_FEATURES_EPOCH,
+                    &FINALIZED_FEATURES,
+                    false,
+                ))
+            }
+        }
+        _ => Response::V0(V0Response::error(35)),
+    }
 }
