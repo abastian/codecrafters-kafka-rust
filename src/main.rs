@@ -91,6 +91,7 @@ fn handle(mut stream: TcpStream) -> Result<(), KafkaError> {
             18 => {
                 let api_versions = protocol::message::process_api_versions_request(
                     &mut buffer,
+                    correlation_id,
                     request_api_version,
                 );
 
@@ -98,15 +99,26 @@ fn handle(mut stream: TcpStream) -> Result<(), KafkaError> {
                 api_versions.write(&mut buffer);
                 buffer.freeze()
             }
+            75 => {
+                let describe_topic_partitions =
+                    protocol::message::process_describe_topic_partitions_request(
+                        &mut buffer,
+                        correlation_id,
+                        request_api_version,
+                    );
+
+                let mut buffer = BytesMut::with_capacity(16);
+                describe_topic_partitions.write(&mut buffer);
+                buffer.freeze()
+            }
             _ => Bytes::new(),
         };
 
-        let message_size = response_data.len() as i32 + 4;
+        let message_size = response_data.len() as i32;
 
         let header_data = {
-            let mut data = BytesMut::with_capacity(8);
+            let mut data = BytesMut::with_capacity(4);
             data.put_i32(message_size);
-            data.put_i32(correlation_id);
             data.freeze()
         };
 

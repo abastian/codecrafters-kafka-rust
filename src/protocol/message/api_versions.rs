@@ -37,14 +37,6 @@ impl Readable for V3Request {
     }
 }
 
-pub enum Request {
-    V0(V0Request),
-    V1(V0Request),
-    V2(V0Request),
-    V3(V3Request),
-    V4(V3Request),
-}
-
 pub struct SupportedFeatureKey {
     name: String,
     min_version: i16,
@@ -61,12 +53,7 @@ impl SupportedFeatureKey {
 }
 impl Writable for &SupportedFeatureKey {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
-        CompactKafkaString({
-            let mut data = BytesMut::with_capacity(self.name.len());
-            data.put_slice(self.name.as_bytes());
-            data.freeze()
-        })
-        .write(buffer);
+        CompactKafkaString(self.name.clone()).write(buffer);
         Int16(self.min_version).write(buffer);
         Int16(self.max_version).write(buffer);
     }
@@ -111,110 +98,137 @@ impl FinalizedFeatureKey {
 }
 impl Writable for &FinalizedFeatureKey {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
-        CompactKafkaString({
-            let mut data = BytesMut::with_capacity(self.name.len());
-            data.put_slice(self.name.as_bytes());
-            data.freeze()
-        })
-        .write(buffer);
+        CompactKafkaString(self.name.clone()).write(buffer);
         Int16(self.max_version_level).write(buffer);
         Int16(self.min_version_level).write(buffer);
     }
 }
 
-pub enum V0Response<'a> {
-    Error(i16),
-    Success {
-        api_keys: &'a HashMap<i16, ApiKeyItem>,
-    },
+pub struct V0Response<'a> {
+    correlation_id: i32,
+    api_keys: Result<&'a HashMap<i16, ApiKeyItem>, i16>,
 }
 impl<'a> V0Response<'a> {
-    pub fn error(error_code: i16) -> Self {
-        Self::Error(error_code)
+    pub fn error(correlation_id: i32, error_code: i16) -> Self {
+        Self {
+            correlation_id,
+            api_keys: Err(error_code),
+        }
     }
 
-    pub fn success(api_keys: &'a HashMap<i16, ApiKeyItem>) -> Self {
-        Self::Success { api_keys }
+    pub fn success(correlation_id: i32, api_keys: &'a HashMap<i16, ApiKeyItem>) -> Self {
+        Self {
+            correlation_id,
+            api_keys: Ok(api_keys),
+        }
     }
 }
 impl<'a> Writable for V0Response<'a> {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
-        match self {
-            V0Response::Error(error_code) => {
+        buffer.put_i32(self.correlation_id);
+        match &self.api_keys {
+            Err(error_code) => {
                 buffer.put_i16(*error_code);
                 buffer.put_u8(0); // api_keys
             }
-            V0Response::Success { api_keys } => {
+            Ok(api_keys) => {
                 buffer.put_i16(0); // error_code
-                CompactArray {
-                    data: Some(api_keys.values().collect::<Vec<_>>()),
+                if api_keys.is_empty() {
+                    buffer.put_u8(0);
+                } else {
+                    CompactArray {
+                        data: Some(api_keys.values().collect::<Vec<_>>()),
+                    }
+                    .write(buffer);
                 }
-                .write(buffer);
             }
         }
     }
 }
 
-pub enum V1Response<'a> {
-    Error(i16),
-    Success {
-        api_keys: &'a HashMap<i16, ApiKeyItem>,
-        throttle_time_ms: i32,
-    },
+struct V1ResponseData<'a> {
+    api_keys: &'a HashMap<i16, ApiKeyItem>,
+    throttle_time_ms: i32,
+}
+
+pub struct V1Response<'a> {
+    correlation_id: i32,
+    data: Result<V1ResponseData<'a>, i16>,
 }
 impl<'a> V1Response<'a> {
-    pub fn error(error_code: i16) -> Self {
-        Self::Error(error_code)
+    pub fn error(correlation_id: i32, error_code: i16) -> Self {
+        Self {
+            correlation_id,
+            data: Err(error_code),
+        }
     }
 
-    pub fn success(api_keys: &'a HashMap<i16, ApiKeyItem>, throttle_time_ms: i32) -> Self {
-        Self::Success {
-            api_keys,
-            throttle_time_ms,
+    pub fn success(
+        correlation_id: i32,
+        api_keys: &'a HashMap<i16, ApiKeyItem>,
+        throttle_time_ms: i32,
+    ) -> Self {
+        Self {
+            correlation_id,
+            data: Ok(V1ResponseData {
+                api_keys,
+                throttle_time_ms,
+            }),
         }
     }
 }
 impl<'a> Writable for V1Response<'a> {
     fn write(&self, buffer: &mut impl bytes::BufMut) {
-        match self {
-            V1Response::Error(error_code) => {
+        buffer.put_i32(self.correlation_id);
+        match &self.data {
+            Err(error_code) => {
                 buffer.put_i16(*error_code);
                 buffer.put_u8(0); // api_keys
                 buffer.put_i32(0); // throttle_time_ms
             }
-            V1Response::Success {
+            Ok(V1ResponseData {
                 api_keys,
                 throttle_time_ms,
-            } => {
+            }) => {
                 buffer.put_i16(0); // error_code
-                CompactArray {
-                    data: Some(api_keys.values().collect::<Vec<_>>()),
+                if api_keys.is_empty() {
+                    buffer.put_u8(0);
+                } else {
+                    CompactArray {
+                        data: Some(api_keys.values().collect::<Vec<_>>()),
+                    }
+                    .write(buffer);
                 }
-                .write(buffer);
                 buffer.put_i32(*throttle_time_ms);
             }
         }
     }
 }
 
-pub enum V3Response<'a> {
-    Error(i16),
-    Success {
-        api_keys: &'a HashMap<i16, ApiKeyItem>,
-        throttle_time_ms: i32,
+struct V3ResponseData<'a> {
+    api_keys: &'a HashMap<i16, ApiKeyItem>,
+    throttle_time_ms: i32,
 
-        supported_features: &'a HashMap<String, SupportedFeatureKey>,
-        finalized_features_epoch: Option<i64>,
-        finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
-        zk_migration_ready: bool,
-    },
+    supported_features: &'a HashMap<String, SupportedFeatureKey>,
+    finalized_features_epoch: Option<i64>,
+    finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
+    zk_migration_ready: bool,
+}
+
+pub struct V3Response<'a> {
+    correlation_id: i32,
+    data: Result<V3ResponseData<'a>, i16>,
 }
 impl<'a> V3Response<'a> {
-    pub fn error(error_code: i16) -> Self {
-        Self::Error(error_code)
+    pub fn error(correlation_id: i32, error_code: i16) -> Self {
+        Self {
+            correlation_id,
+            data: Err(error_code),
+        }
     }
 
     pub fn success(
+        correlation_id: i32,
         api_keys: &'a HashMap<i16, ApiKeyItem>,
         throttle_time_ms: i32,
         supported_features: &'a HashMap<String, SupportedFeatureKey>,
@@ -222,38 +236,46 @@ impl<'a> V3Response<'a> {
         finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
         zk_migration_ready: bool,
     ) -> Self {
-        Self::Success {
-            api_keys,
-            throttle_time_ms,
-            supported_features,
-            finalized_features_epoch,
-            finalized_features,
-            zk_migration_ready,
-        }
-    }
-}
-impl<'a> Writable for V3Response<'a> {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        match self {
-            V3Response::Error(error_code) => {
-                buffer.put_i16(*error_code);
-                buffer.put_u8(0); // api_keys
-                buffer.put_i32(0); // throttle_time_ms
-                buffer.put_u8(0); // empty _tagged_fields
-            }
-            V3Response::Success {
+        Self {
+            correlation_id,
+            data: Ok(V3ResponseData {
                 api_keys,
                 throttle_time_ms,
                 supported_features,
                 finalized_features_epoch,
                 finalized_features,
                 zk_migration_ready,
-            } => {
+            }),
+        }
+    }
+}
+impl<'a> Writable for V3Response<'a> {
+    fn write(&self, buffer: &mut impl bytes::BufMut) {
+        buffer.put_i32(self.correlation_id);
+        match &self.data {
+            Err(error_code) => {
+                buffer.put_i16(*error_code);
+                buffer.put_u8(0); // api_keys
+                buffer.put_i32(0); // throttle_time_ms
+                buffer.put_u8(0); // empty _tagged_fields
+            }
+            Ok(V3ResponseData {
+                api_keys,
+                throttle_time_ms,
+                supported_features,
+                finalized_features_epoch,
+                finalized_features,
+                zk_migration_ready,
+            }) => {
                 buffer.put_i16(0); // error_code
-                CompactArray {
-                    data: Some(api_keys.values().collect::<Vec<_>>()),
+                if api_keys.is_empty() {
+                    buffer.put_u8(0);
+                } else {
+                    CompactArray {
+                        data: Some(api_keys.values().collect::<Vec<_>>()),
+                    }
+                    .write(buffer);
                 }
-                .write(buffer);
                 buffer.put_i32(*throttle_time_ms);
 
                 let mut tagged_fields = TaggedFields::new();
@@ -302,10 +324,22 @@ impl<'a> Writable for V3Response<'a> {
                     }
                 }
 
-                tagged_fields.write(buffer);
+                if tagged_fields.is_empty() {
+                    buffer.put_u8(0);
+                } else {
+                    tagged_fields.write(buffer);
+                }
             }
         }
     }
+}
+
+pub enum Request {
+    V0(V0Request),
+    V1(V0Request),
+    V2(V0Request),
+    V3(V3Request),
+    V4(V3Request),
 }
 
 pub enum Response<'a> {
@@ -327,34 +361,35 @@ impl<'a> Writable for Response<'a> {
     }
 }
 
-pub fn process_api_versions_request(buffer: &mut impl Buf, version: i16) -> Response {
+pub fn process_request(buffer: &mut impl Buf, correlation_id: i32, version: i16) -> Response {
     match version {
         0 => {
             if V0Request::read(buffer).is_err() {
-                Response::V0(V0Response::error(2))
+                Response::V0(V0Response::error(correlation_id, 2))
             } else {
-                Response::V0(V0Response::success(&SUPPORTED_APIS))
+                Response::V0(V0Response::success(correlation_id, &SUPPORTED_APIS))
             }
         }
         1 => {
             if V0Request::read(buffer).is_err() {
-                Response::V1(V1Response::error(2))
+                Response::V1(V1Response::error(correlation_id, 2))
             } else {
-                Response::V1(V1Response::success(&SUPPORTED_APIS, 0))
+                Response::V1(V1Response::success(correlation_id, &SUPPORTED_APIS, 0))
             }
         }
         2 => {
             if V0Request::read(buffer).is_err() {
-                Response::V2(V1Response::error(2))
+                Response::V2(V1Response::error(correlation_id, 2))
             } else {
-                Response::V2(V1Response::success(&SUPPORTED_APIS, 0))
+                Response::V2(V1Response::success(correlation_id, &SUPPORTED_APIS, 0))
             }
         }
         3 => {
             if V3Request::read(buffer).is_err() {
-                Response::V3(V3Response::error(2))
+                Response::V3(V3Response::error(correlation_id, 2))
             } else {
                 Response::V3(V3Response::success(
+                    correlation_id,
                     &SUPPORTED_APIS,
                     0,
                     &SUPPORTED_FEATURES,
@@ -366,9 +401,10 @@ pub fn process_api_versions_request(buffer: &mut impl Buf, version: i16) -> Resp
         }
         4 => {
             if V3Request::read(buffer).is_err() {
-                Response::V4(V3Response::error(2))
+                Response::V4(V3Response::error(correlation_id, 2))
             } else {
                 Response::V4(V3Response::success(
+                    correlation_id,
                     &SUPPORTED_APIS,
                     0,
                     &SUPPORTED_FEATURES,
@@ -378,6 +414,6 @@ pub fn process_api_versions_request(buffer: &mut impl Buf, version: i16) -> Resp
                 ))
             }
         }
-        _ => Response::V0(V0Response::error(35)),
+        _ => Response::V0(V0Response::error(correlation_id, 35)),
     }
 }
