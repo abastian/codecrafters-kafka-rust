@@ -26,3 +26,31 @@ impl Writable for KafkaUuid {
         buffer.put_u128(self.0.as_u128());
     }
 }
+
+pub struct NullableRecord<T>(pub Option<T>);
+impl<T> Readable for NullableRecord<T>
+where
+    T: Readable,
+{
+    fn read(buffer: &mut impl bytes::Buf) -> Result<Self, super::Error> {
+        if buffer.get_i8() == -1 {
+            Ok(Self(None))
+        } else {
+            Ok(Self(Some(T::read(buffer)?)))
+        }
+    }
+}
+impl<T> Writable for NullableRecord<T>
+where
+    T: Writable,
+{
+    fn write(&self, buffer: &mut impl bytes::BufMut) {
+        match self.0 {
+            Some(ref value) => {
+                buffer.put_u8(0);
+                value.write(buffer);
+            }
+            None => buffer.put_i8(-1),
+        }
+    }
+}

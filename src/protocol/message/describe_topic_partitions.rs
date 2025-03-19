@@ -4,7 +4,7 @@ use crate::protocol::{
     self,
     r#type::{
         Boolean, CompactArray, CompactKafkaString, CompactNullableKafkaString, Int16, Int32,
-        KafkaUuid, TaggedFields,
+        KafkaUuid, NullableRecord, TaggedFields,
     },
     Readable, Writable,
 };
@@ -19,19 +19,12 @@ impl Readable for V0Request {
         let topics = CompactArray::<TopicRequest>::read(buffer)?.data.ok_or(
             protocol::Error::IllegalArgument("non-nullable field topics was serialized as null"),
         )?;
-        let response_partition_limit = Int32::read(buffer)?;
-        let cursor = {
-            let is_exists = buffer.get_i8() >= 0;
-            if is_exists {
-                Some(Cursor::read(buffer)?)
-            } else {
-                None
-            }
-        };
+        let response_partition_limit = Int32::read(buffer)?.0;
+        let cursor = NullableRecord::<Cursor>::read(buffer)?.0;
         let _tagged_fields = TaggedFields::read(buffer)?;
         Ok(V0Request {
             topics,
-            response_partition_limit: response_partition_limit.0,
+            response_partition_limit,
             cursor,
         })
     }
@@ -87,12 +80,7 @@ impl Writable for V0Response {
             data: Some(self.topics.iter().collect()),
         }
         .write(buffer);
-        if let Some(cursor) = &self.next_cursor {
-            buffer.put_u8(0);
-            cursor.write(buffer);
-        } else {
-            buffer.put_i8(-1);
-        }
+        NullableRecord(self.next_cursor.as_ref()).write(buffer);
         buffer.put_u8(0); // empty _tagged_fields
     }
 }
