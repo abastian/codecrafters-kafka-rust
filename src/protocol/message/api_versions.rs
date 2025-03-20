@@ -5,7 +5,10 @@ use bytes::{Buf, BufMut, BytesMut};
 use crate::{
     protocol::{
         self,
-        r#type::{CompactArray, CompactKafkaString, Int16, TaggedField, TaggedFields},
+        r#type::{
+            Boolean, CompactArray, CompactKafkaString, Int16, Int32, Int64, TaggedField,
+            TaggedFields,
+        },
         Readable, Writable,
     },
     FINALIZED_FEATURES, FINALIZED_FEATURES_EPOCH, SUPPORTED_APIS, SUPPORTED_FEATURES,
@@ -13,21 +16,35 @@ use crate::{
 
 pub struct V0Request;
 impl Readable for V0Request {
-    fn read(_buffer: &mut impl bytes::Buf) -> Result<Self, protocol::Error> {
+    fn read(_buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         Ok(V0Request)
     }
 }
 
 pub struct V3Request {
-    client_software_name: String,
-    client_software_version: String,
+    client_software_name: CompactKafkaString,
+    client_software_version: CompactKafkaString,
+}
+impl V3Request {
+    pub fn new(client_software_name: &str, client_software_version: &str) -> Self {
+        Self {
+            client_software_name: client_software_name.into(),
+            client_software_version: client_software_version.into(),
+        }
+    }
+
+    pub fn client_software_name(&self) -> Result<&str, protocol::Error> {
+        self.client_software_name.as_str()
+    }
+
+    pub fn client_software_version(&self) -> Result<&str, protocol::Error> {
+        self.client_software_version.as_str()
+    }
 }
 impl Readable for V3Request {
-    fn read(buffer: &mut impl bytes::Buf) -> Result<Self, protocol::Error> {
-        let client_software_name =
-            std::str::from_utf8(CompactKafkaString::read(buffer)?.0.as_ref())?.to_owned();
-        let client_software_version =
-            std::str::from_utf8(CompactKafkaString::read(buffer)?.0.as_ref())?.to_owned();
+    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+        let client_software_name = CompactKafkaString::read(buffer)?;
+        let client_software_version = CompactKafkaString::read(buffer)?;
         let _tagged_fields = TaggedFields::read(buffer)?;
 
         Ok(Self {
@@ -38,108 +55,105 @@ impl Readable for V3Request {
 }
 
 pub struct SupportedFeatureKey {
-    name: String,
-    min_version: i16,
-    max_version: i16,
+    name: CompactKafkaString,
+    min_version: Int16,
+    max_version: Int16,
 }
 impl SupportedFeatureKey {
     pub fn new(name: &str, min_version: i16, max_version: i16) -> Self {
         Self {
-            name: name.to_owned(),
-            min_version,
-            max_version,
+            name: name.into(),
+            min_version: min_version.into(),
+            max_version: max_version.into(),
         }
     }
 }
 impl Writable for &SupportedFeatureKey {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        CompactKafkaString(self.name.clone()).write(buffer);
-        Int16(self.min_version).write(buffer);
-        Int16(self.max_version).write(buffer);
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.name.write(buffer);
+        self.min_version.write(buffer);
+        self.max_version.write(buffer);
     }
 }
 
 pub struct ApiKeyItem {
-    api_key: i16,
-    min_version: i16,
-    max_version: i16,
+    api_key: Int16,
+    min_version: Int16,
+    max_version: Int16,
 }
 impl ApiKeyItem {
     pub fn new(api_key: i16, min_version: i16, max_version: i16) -> Self {
         Self {
-            api_key,
-            min_version,
-            max_version,
+            api_key: api_key.into(),
+            min_version: min_version.into(),
+            max_version: max_version.into(),
         }
     }
 }
 impl Writable for &ApiKeyItem {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        buffer.put_i16(self.api_key);
-        buffer.put_i16(self.min_version);
-        buffer.put_i16(self.max_version);
-        buffer.put_u8(0); // empty _tagged_fields
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.api_key.write(buffer);
+        self.min_version.write(buffer);
+        self.max_version.write(buffer);
+        TaggedFields::write_empty(buffer);
     }
 }
 
 pub struct FinalizedFeatureKey {
-    name: String,
-    max_version_level: i16,
-    min_version_level: i16,
+    name: CompactKafkaString,
+    max_version_level: Int16,
+    min_version_level: Int16,
 }
 impl FinalizedFeatureKey {
     pub fn new(name: &str, max_version_level: i16, min_version_level: i16) -> Self {
         Self {
-            name: name.to_owned(),
-            max_version_level,
-            min_version_level,
+            name: name.into(),
+            max_version_level: max_version_level.into(),
+            min_version_level: min_version_level.into(),
         }
     }
 }
 impl Writable for &FinalizedFeatureKey {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        CompactKafkaString(self.name.clone()).write(buffer);
-        Int16(self.max_version_level).write(buffer);
-        Int16(self.min_version_level).write(buffer);
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.name.write(buffer);
+        self.max_version_level.write(buffer);
+        self.min_version_level.write(buffer);
     }
 }
 
 pub struct V0Response<'a> {
-    correlation_id: i32,
-    api_keys: Result<&'a HashMap<i16, ApiKeyItem>, i16>,
+    correlation_id: Int32,
+    api_keys: Result<&'a HashMap<i16, ApiKeyItem>, Int16>,
 }
 impl<'a> V0Response<'a> {
     pub fn error(correlation_id: i32, error_code: i16) -> Self {
         Self {
-            correlation_id,
-            api_keys: Err(error_code),
+            correlation_id: correlation_id.into(),
+            api_keys: Err(error_code.into()),
         }
     }
 
     pub fn success(correlation_id: i32, api_keys: &'a HashMap<i16, ApiKeyItem>) -> Self {
         Self {
-            correlation_id,
+            correlation_id: correlation_id.into(),
             api_keys: Ok(api_keys),
         }
     }
 }
 impl<'a> Writable for V0Response<'a> {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        buffer.put_i32(self.correlation_id);
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.correlation_id.write(buffer);
         match &self.api_keys {
             Err(error_code) => {
-                buffer.put_i16(*error_code);
+                error_code.write(buffer);
                 buffer.put_u8(0); // api_keys
             }
             Ok(api_keys) => {
-                buffer.put_i16(0); // error_code
+                Int16::write(buffer, 0); // error_code
                 if api_keys.is_empty() {
                     buffer.put_u8(0);
                 } else {
-                    CompactArray {
-                        data: Some(api_keys.values().collect::<Vec<_>>()),
-                    }
-                    .write(buffer);
+                    CompactArray::write(buffer, &api_keys.values().collect::<Vec<_>>());
                 }
             }
         }
@@ -148,18 +162,18 @@ impl<'a> Writable for V0Response<'a> {
 
 struct V1ResponseData<'a> {
     api_keys: &'a HashMap<i16, ApiKeyItem>,
-    throttle_time_ms: i32,
+    throttle_time_ms: Int32,
 }
 
 pub struct V1Response<'a> {
-    correlation_id: i32,
-    data: Result<V1ResponseData<'a>, i16>,
+    correlation_id: Int32,
+    data: Result<V1ResponseData<'a>, Int16>,
 }
 impl<'a> V1Response<'a> {
     pub fn error(correlation_id: i32, error_code: i16) -> Self {
         Self {
-            correlation_id,
-            data: Err(error_code),
+            correlation_id: correlation_id.into(),
+            data: Err(error_code.into()),
         }
     }
 
@@ -169,20 +183,20 @@ impl<'a> V1Response<'a> {
         throttle_time_ms: i32,
     ) -> Self {
         Self {
-            correlation_id,
+            correlation_id: correlation_id.into(),
             data: Ok(V1ResponseData {
                 api_keys,
-                throttle_time_ms,
+                throttle_time_ms: throttle_time_ms.into(),
             }),
         }
     }
 }
 impl<'a> Writable for V1Response<'a> {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        buffer.put_i32(self.correlation_id);
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.correlation_id.write(buffer);
         match &self.data {
             Err(error_code) => {
-                buffer.put_i16(*error_code);
+                error_code.write(buffer);
                 buffer.put_u8(0); // api_keys
                 buffer.put_i32(0); // throttle_time_ms
             }
@@ -192,14 +206,11 @@ impl<'a> Writable for V1Response<'a> {
             }) => {
                 buffer.put_i16(0); // error_code
                 if api_keys.is_empty() {
-                    buffer.put_u8(0);
+                    CompactArray::<ApiKeyItem>::write_empty(buffer);
                 } else {
-                    CompactArray {
-                        data: Some(api_keys.values().collect::<Vec<_>>()),
-                    }
-                    .write(buffer);
+                    CompactArray::write(buffer, &api_keys.values().collect::<Vec<_>>())
                 }
-                buffer.put_i32(*throttle_time_ms);
+                throttle_time_ms.write(buffer);
             }
         }
     }
@@ -207,23 +218,23 @@ impl<'a> Writable for V1Response<'a> {
 
 struct V3ResponseData<'a> {
     api_keys: &'a HashMap<i16, ApiKeyItem>,
-    throttle_time_ms: i32,
+    throttle_time_ms: Int32,
 
     supported_features: &'a HashMap<String, SupportedFeatureKey>,
-    finalized_features_epoch: Option<i64>,
+    finalized_features_epoch: Option<Int64>,
     finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
-    zk_migration_ready: bool,
+    zk_migration_ready: Boolean,
 }
 
 pub struct V3Response<'a> {
-    correlation_id: i32,
-    data: Result<V3ResponseData<'a>, i16>,
+    correlation_id: Int32,
+    data: Result<V3ResponseData<'a>, Int16>,
 }
 impl<'a> V3Response<'a> {
     pub fn error(correlation_id: i32, error_code: i16) -> Self {
         Self {
-            correlation_id,
-            data: Err(error_code),
+            correlation_id: correlation_id.into(),
+            data: Err(error_code.into()),
         }
     }
 
@@ -237,27 +248,27 @@ impl<'a> V3Response<'a> {
         zk_migration_ready: bool,
     ) -> Self {
         Self {
-            correlation_id,
+            correlation_id: correlation_id.into(),
             data: Ok(V3ResponseData {
                 api_keys,
-                throttle_time_ms,
+                throttle_time_ms: throttle_time_ms.into(),
                 supported_features,
-                finalized_features_epoch,
+                finalized_features_epoch: finalized_features_epoch.map(|v| v.into()),
                 finalized_features,
-                zk_migration_ready,
+                zk_migration_ready: zk_migration_ready.into(),
             }),
         }
     }
 }
 impl<'a> Writable for V3Response<'a> {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        buffer.put_i32(self.correlation_id);
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.correlation_id.write(buffer);
         match &self.data {
             Err(error_code) => {
-                buffer.put_i16(*error_code);
-                buffer.put_u8(0); // api_keys
-                buffer.put_i32(0); // throttle_time_ms
-                buffer.put_u8(0); // empty _tagged_fields
+                error_code.write(buffer);
+                CompactArray::<ApiKeyItem>::write_empty(buffer); // api_keys
+                Int32::write(buffer, 0); // throttle_time_ms
+                TaggedFields::write_empty(buffer); // empty _tagged_fields
             }
             Ok(V3ResponseData {
                 api_keys,
@@ -269,65 +280,54 @@ impl<'a> Writable for V3Response<'a> {
             }) => {
                 buffer.put_i16(0); // error_code
                 if api_keys.is_empty() {
-                    buffer.put_u8(0);
+                    CompactArray::<ApiKeyItem>::write_empty(buffer);
                 } else {
-                    CompactArray {
-                        data: Some(api_keys.values().collect::<Vec<_>>()),
-                    }
-                    .write(buffer);
+                    CompactArray::write(buffer, &api_keys.values().collect::<Vec<_>>());
                 }
-                buffer.put_i32(*throttle_time_ms);
+                throttle_time_ms.write(buffer);
 
-                let mut tagged_fields = TaggedFields::new();
+                let mut tagged_fields = Vec::<TaggedField>::new();
                 if !supported_features.is_empty() {
                     let mut buffer = BytesMut::with_capacity(24 * supported_features.len());
-                    CompactArray {
-                        data: {
-                            let mut data = supported_features.values().collect::<Vec<_>>();
-                            data.sort_by_key(|sf| &sf.name);
-                            Some(data)
-                        },
-                    }
-                    .write(&mut buffer);
+                    CompactArray::write(
+                        &mut buffer,
+                        &supported_features.values().collect::<Vec<_>>(),
+                    );
                     let data = buffer.freeze();
-                    let tagged_field = TaggedField { key: 0, data };
+                    let tagged_field = TaggedField::new(0, data);
                     tagged_fields.push(tagged_field);
                 }
                 if let Some(finalized_feature_epoch) = finalized_features_epoch {
                     let mut buffer = BytesMut::with_capacity(8);
-                    buffer.put_i64(*finalized_feature_epoch); // Int64(*finalized_feature_epoch).write(&mut buffer);
+                    finalized_feature_epoch.write(&mut buffer);
                     let data = buffer.freeze();
-                    let tagged_field = TaggedField { key: 1, data };
+                    let tagged_field = TaggedField::new(1, data);
                     tagged_fields.push(tagged_field);
 
-                    if *finalized_feature_epoch > 0 && !finalized_features.is_empty() {
+                    if finalized_feature_epoch.value() > 0 && !finalized_features.is_empty() {
                         let mut buffer = BytesMut::with_capacity(24 * finalized_features.len());
-                        CompactArray {
-                            data: {
-                                let mut data = finalized_features.values().collect::<Vec<_>>();
-                                data.sort_by_key(|sf| &sf.name);
-                                Some(data)
-                            },
-                        }
-                        .write(&mut buffer);
+                        CompactArray::write(
+                            &mut buffer,
+                            &finalized_features.values().collect::<Vec<_>>(),
+                        );
                         let data = buffer.freeze();
-                        let tagged_field = TaggedField { key: 2, data };
+                        let tagged_field = TaggedField::new(2, data);
                         tagged_fields.push(tagged_field);
                     }
 
-                    if *zk_migration_ready {
+                    if zk_migration_ready.value() {
                         let mut buffer = BytesMut::with_capacity(1);
-                        buffer.put_u8(0); // Boolean(true).write(&mut buffer);
+                        zk_migration_ready.write(&mut buffer);
                         let data = buffer.freeze();
-                        let tagged_field = TaggedField { key: 3, data };
+                        let tagged_field = TaggedField::new(3, data);
                         tagged_fields.push(tagged_field);
                     }
                 }
 
                 if tagged_fields.is_empty() {
-                    buffer.put_u8(0);
+                    TaggedFields::write_empty(buffer);
                 } else {
-                    tagged_fields.write(buffer);
+                    TaggedFields::write(buffer, &tagged_fields);
                 }
             }
         }
@@ -350,7 +350,7 @@ pub enum Response<'a> {
     V4(V3Response<'a>),
 }
 impl<'a> Writable for Response<'a> {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write(&self, buffer: &mut impl BufMut) {
         match self {
             Response::V0(resp) => resp.write(buffer),
             Response::V1(resp) => resp.write(buffer),

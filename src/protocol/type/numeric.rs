@@ -2,7 +2,24 @@ use bytes::{Buf, BufMut};
 
 use crate::protocol::{self, Readable, Writable};
 
-pub struct Boolean(pub bool);
+#[derive(Debug)]
+pub struct Boolean(bool);
+impl Boolean {
+    pub fn value(&self) -> bool {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: bool) {
+        let value: u8 = if value { 1 } else { 0 };
+        buffer.put_u8(value);
+    }
+}
+impl From<bool> for Boolean {
+    fn from(value: bool) -> Self {
+        Self(value)
+    }
+}
 impl Readable for Boolean {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = buffer.get_u8() != 0;
@@ -11,12 +28,27 @@ impl Readable for Boolean {
 }
 impl Writable for Boolean {
     fn write(&self, buffer: &mut impl BufMut) {
-        let value: u8 = if self.0 { 1 } else { 0 };
-        buffer.put_u8(value);
+        Self::write(buffer, self.0);
     }
 }
 
-pub struct Int8(pub i8);
+#[derive(Debug)]
+pub struct Int8(i8);
+impl Int8 {
+    pub fn value(&self) -> i8 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: i8) {
+        buffer.put_i8(value);
+    }
+}
+impl From<i8> for Int8 {
+    fn from(value: i8) -> Self {
+        Self(value)
+    }
+}
 impl Readable for Int8 {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = buffer.get_i8();
@@ -25,11 +57,27 @@ impl Readable for Int8 {
 }
 impl Writable for Int8 {
     fn write(&self, buffer: &mut impl BufMut) {
-        buffer.put_i8(self.0)
+        Self::write(buffer, self.0);
     }
 }
 
-pub struct Int16(pub i16);
+#[derive(Debug)]
+pub struct Int16(i16);
+impl Int16 {
+    pub fn value(&self) -> i16 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: i16) {
+        buffer.put_i16(value);
+    }
+}
+impl From<i16> for Int16 {
+    fn from(value: i16) -> Self {
+        Self(value)
+    }
+}
 impl Readable for Int16 {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = buffer.get_i16();
@@ -38,11 +86,27 @@ impl Readable for Int16 {
 }
 impl Writable for Int16 {
     fn write(&self, buffer: &mut impl BufMut) {
-        buffer.put_i16(self.0)
+        Self::write(buffer, self.0);
     }
 }
 
-pub struct Int32(pub i32);
+#[derive(Debug)]
+pub struct Int32(i32);
+impl Int32 {
+    pub fn value(&self) -> i32 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: i32) {
+        buffer.put_i32(value);
+    }
+}
+impl From<i32> for Int32 {
+    fn from(value: i32) -> Self {
+        Self(value)
+    }
+}
 impl Readable for Int32 {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = buffer.get_i32();
@@ -51,11 +115,27 @@ impl Readable for Int32 {
 }
 impl Writable for Int32 {
     fn write(&self, buffer: &mut impl BufMut) {
-        buffer.put_i32(self.0)
+        Self::write(buffer, self.0);
     }
 }
 
-pub struct Int64(pub i64);
+#[derive(Debug)]
+pub struct Int64(i64);
+impl Int64 {
+    pub fn value(&self) -> i64 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: i64) {
+        buffer.put_i64(value);
+    }
+}
+impl From<i64> for Int64 {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
 impl Readable for Int64 {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = buffer.get_i64();
@@ -64,11 +144,27 @@ impl Readable for Int64 {
 }
 impl Writable for Int64 {
     fn write(&self, buffer: &mut impl BufMut) {
-        buffer.put_i64(self.0)
+        Self::write(buffer, self.0);
     }
 }
 
-pub struct UInt16(pub u16);
+#[derive(Debug)]
+pub struct UInt16(u16);
+impl UInt16 {
+    pub fn value(&self) -> u16 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: u16) {
+        buffer.put_u16(value);
+    }
+}
+impl From<u16> for UInt16 {
+    fn from(value: u16) -> Self {
+        Self(value)
+    }
+}
 impl Readable for UInt16 {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = buffer.get_u16();
@@ -77,11 +173,27 @@ impl Readable for UInt16 {
 }
 impl Writable for UInt16 {
     fn write(&self, buffer: &mut impl BufMut) {
-        buffer.put_u16(self.0)
+        Self::write(buffer, self.0);
     }
 }
 
-pub struct UInt32(pub u32);
+#[derive(Debug)]
+pub struct UInt32(u32);
+impl UInt32 {
+    pub fn value(&self) -> u32 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: u32) {
+        buffer.put_u32(value);
+    }
+}
+impl From<u32> for UInt32 {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
 impl Readable for UInt32 {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = buffer.get_u32();
@@ -90,7 +202,7 @@ impl Readable for UInt32 {
 }
 impl Writable for UInt32 {
     fn write(&self, buffer: &mut impl BufMut) {
-        buffer.put_u32(self.0)
+        Self::write(buffer, self.0);
     }
 }
 
@@ -182,7 +294,24 @@ pub(crate) fn read_unsigned_varlong(buffer: &mut impl Buf) -> Result<u64, protoc
     }
 }
 
-pub struct VarInt(pub i32);
+#[derive(Debug)]
+pub struct VarInt(i32);
+impl VarInt {
+    pub fn value(&self) -> i32 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: i32) {
+        let value = ((value << 1) ^ (value >> 31)) as u32;
+        write_unsigned_varint(value, buffer);
+    }
+}
+impl From<i32> for VarInt {
+    fn from(value: i32) -> Self {
+        Self(value)
+    }
+}
 impl Readable for VarInt {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = read_unsigned_varint(buffer)?;
@@ -191,12 +320,28 @@ impl Readable for VarInt {
 }
 impl Writable for VarInt {
     fn write(&self, buffer: &mut impl BufMut) {
-        let value = ((self.0 << 1) ^ (self.0 >> 31)) as u32;
-        write_unsigned_varint(value, buffer);
+        Self::write(buffer, self.0);
     }
 }
 
-pub struct VarLong(pub i64);
+#[derive(Debug)]
+pub struct VarLong(i64);
+impl VarLong {
+    pub fn value(&self) -> i64 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: i64) {
+        let value = ((value << 1) ^ (value >> 63)) as u64;
+        write_unsigned_varlong(value, buffer);
+    }
+}
+impl From<i64> for VarLong {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
 impl Readable for VarLong {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = read_unsigned_varlong(buffer)?;
@@ -205,12 +350,27 @@ impl Readable for VarLong {
 }
 impl Writable for VarLong {
     fn write(&self, buffer: &mut impl BufMut) {
-        let value = ((self.0 << 1) ^ (self.0 >> 63)) as u64;
-        write_unsigned_varlong(value, buffer);
+        Self::write(buffer, self.0);
     }
 }
 
-pub struct Float64(pub f64);
+#[derive(Debug)]
+pub struct Float64(f64);
+impl Float64 {
+    pub fn value(&self) -> f64 {
+        self.0
+    }
+
+    #[inline(always)]
+    pub(crate) fn write(buffer: &mut impl BufMut, value: f64) {
+        buffer.put_f64(value);
+    }
+}
+impl From<f64> for Float64 {
+    fn from(value: f64) -> Self {
+        Self(value)
+    }
+}
 impl Readable for Float64 {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let value = buffer.get_f64();
@@ -219,6 +379,6 @@ impl Readable for Float64 {
 }
 impl Writable for Float64 {
     fn write(&self, buffer: &mut impl BufMut) {
-        buffer.put_f64(self.0);
+        Self::write(buffer, self.0);
     }
 }

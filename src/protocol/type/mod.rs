@@ -15,7 +15,17 @@ pub use tagged_fields::{TaggedField, TaggedFields};
 
 use super::{Readable, Writable};
 
-pub struct KafkaUuid(pub uuid::Uuid);
+pub struct KafkaUuid(uuid::Uuid);
+impl KafkaUuid {
+    pub fn value(&self) -> Self {
+        Self(self.0)
+    }
+}
+impl From<uuid::Uuid> for KafkaUuid {
+    fn from(value: uuid::Uuid) -> Self {
+        Self(value)
+    }
+}
 impl Readable for KafkaUuid {
     fn read(buffer: &mut impl bytes::Buf) -> Result<Self, super::Error> {
         Ok(Self(uuid::Uuid::from_u128(buffer.get_u128())))
@@ -27,7 +37,17 @@ impl Writable for KafkaUuid {
     }
 }
 
-pub struct NullableRecord<T>(pub Option<T>);
+pub struct NullableRecord<T>(Option<T>);
+impl<T> NullableRecord<T> {
+    pub fn value(&self) -> Option<&T> {
+        self.0.as_ref()
+    }
+}
+impl<T> From<Option<T>> for NullableRecord<T> {
+    fn from(value: Option<T>) -> Self {
+        Self(value)
+    }
+}
 impl<T> Readable for NullableRecord<T>
 where
     T: Readable,

@@ -10,17 +10,33 @@ use crate::protocol::{
 };
 
 pub struct V0Request {
-    topics: Vec<TopicRequest>,
-    response_partition_limit: i32,
-    cursor: Option<Cursor>,
+    topics: CompactArray<TopicRequest>,
+    response_partition_limit: Int32,
+    cursor: NullableRecord<Cursor>,
+}
+impl V0Request {
+    pub fn new(
+        topics: Vec<TopicRequest>,
+        response_partition_limit: i32,
+        cursor: Option<Cursor>,
+    ) -> Self {
+        V0Request {
+            topics: topics.into(),
+            response_partition_limit: response_partition_limit.into(),
+            cursor: cursor.into(),
+        }
+    }
 }
 impl Readable for V0Request {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let topics = CompactArray::<TopicRequest>::read(buffer)?.data.ok_or(
-            protocol::Error::IllegalArgument("non-nullable field topics was serialized as null"),
-        )?;
-        let response_partition_limit = Int32::read(buffer)?.0;
-        let cursor = NullableRecord::<Cursor>::read(buffer)?.0;
+        let topics = CompactArray::<TopicRequest>::read(buffer)?;
+        if topics.value().is_none() {
+            return Err(protocol::Error::IllegalArgument(
+                "non-nullable field topic was serialized as null",
+            ));
+        }
+        let response_partition_limit = Int32::read(buffer)?;
+        let cursor = NullableRecord::<Cursor>::read(buffer)?;
         let _tagged_fields = TaggedFields::read(buffer)?;
         Ok(V0Request {
             topics,
@@ -31,127 +47,176 @@ impl Readable for V0Request {
 }
 
 pub struct TopicRequest {
-    name: String,
+    name: CompactKafkaString,
 }
 impl Readable for TopicRequest {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let name = std::str::from_utf8(CompactKafkaString::read(buffer)?.0.as_ref())?.to_owned();
+        let name = CompactKafkaString::read(buffer)?;
         let _tagged_fields = TaggedFields::read(buffer)?;
         Ok(TopicRequest { name })
     }
 }
 
 pub struct Cursor {
-    topic_name: String,
-    partition_index: i32,
+    topic_name: CompactKafkaString,
+    partition_index: Int32,
 }
 impl Readable for Cursor {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let topic_name =
-            std::str::from_utf8(CompactKafkaString::read(buffer)?.0.as_ref())?.to_owned();
+        let topic_name = CompactKafkaString::read(buffer)?;
         let partition_index = Int32::read(buffer)?;
         let _tagged_fields = TaggedFields::read(buffer)?;
         Ok(Cursor {
             topic_name,
-            partition_index: partition_index.0,
+            partition_index,
         })
     }
 }
-impl Writable for &Cursor {
+impl Writable for Cursor {
     fn write(&self, buffer: &mut impl BufMut) {
-        CompactKafkaString(self.topic_name.clone()).write(buffer);
-        Int32(self.partition_index).write(buffer);
-        buffer.put_u8(0); // empty _tagged_fields
+        self.topic_name.write(buffer);
+        self.partition_index.write(buffer);
+        TaggedFields::write_empty(buffer);
     }
 }
 
 pub struct V0Response {
-    correlation_id: i32,
-    throttle_time_ms: i32,
-    topics: Vec<DescribeTopicPartitionsResponseTopic>,
-    next_cursor: Option<Cursor>,
+    correlation_id: Int32,
+    throttle_time_ms: Int32,
+    topics: CompactArray<DescribeTopicPartitionsResponseTopic>,
+    next_cursor: NullableRecord<Cursor>,
+}
+impl Readable for V0Response {
+    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+        let correlation_id = Int32::read(buffer)?;
+        let throttle_time_ms = Int32::read(buffer)?;
+        let topics = CompactArray::read(buffer)?;
+        let next_cursor = NullableRecord::read(buffer)?;
+        Ok(V0Response {
+            correlation_id,
+            throttle_time_ms,
+            topics,
+            next_cursor,
+        })
+    }
 }
 impl Writable for V0Response {
     fn write(&self, buffer: &mut impl BufMut) {
-        buffer.put_i32(self.correlation_id);
-        buffer.put_u8(0); // empty _tagged_fields
-        buffer.put_i32(self.throttle_time_ms);
-        CompactArray {
-            data: Some(self.topics.iter().collect()),
-        }
-        .write(buffer);
-        NullableRecord(self.next_cursor.as_ref()).write(buffer);
-        buffer.put_u8(0); // empty _tagged_fields
+        self.correlation_id.write(buffer);
+        TaggedFields::write_empty(buffer);
+        self.throttle_time_ms.write(buffer);
+        self.topics.write(buffer);
+        self.next_cursor.write(buffer);
+        TaggedFields::write_empty(buffer);
     }
 }
 
 pub struct DescribeTopicPartitionsResponseTopic {
-    error_code: i16,
-    name: Option<String>,
-    topic_id: uuid::Uuid,
-    is_internal: bool,
-    partitions: Vec<DescribeTopicPartitionsResponsePartition>,
-    topic_authorized_operations: i32,
+    error_code: Int16,
+    name: CompactNullableKafkaString,
+    topic_id: KafkaUuid,
+    is_internal: Boolean,
+    partitions: CompactArray<DescribeTopicPartitionsResponsePartition>,
+    topic_authorized_operations: Int32,
 }
-impl Writable for &DescribeTopicPartitionsResponseTopic {
-    fn write(&self, buffer: &mut impl BufMut) {
-        Int16(self.error_code).write(buffer);
-        CompactNullableKafkaString(self.name.clone()).write(buffer);
-        KafkaUuid(self.topic_id).write(buffer);
-        Boolean(self.is_internal).write(buffer);
-        CompactArray {
-            data: Some(self.partitions.iter().collect()),
+impl Readable for DescribeTopicPartitionsResponseTopic {
+    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+        let error_code = Int16::read(buffer)?;
+        let name = CompactNullableKafkaString::read(buffer)?;
+        let topic_id = KafkaUuid::read(buffer)?;
+        let is_internal = Boolean::read(buffer)?;
+        let partitions = CompactArray::read(buffer)?;
+        if partitions.value().is_none() {
+            return Err(protocol::Error::IllegalArgument(
+                "non-nullable field topic was serialized as null",
+            ));
         }
-        .write(buffer);
-        Int32(self.topic_authorized_operations).write(buffer);
-        buffer.put_u8(0); // empty _tagged_fields
+        let topic_authorized_operations = Int32::read(buffer)?;
+        let _tagged_fields = TaggedFields::read(buffer)?;
+        Ok(Self {
+            error_code,
+            name,
+            topic_id,
+            is_internal,
+            partitions,
+            topic_authorized_operations,
+        })
+    }
+}
+impl Writable for DescribeTopicPartitionsResponseTopic {
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.error_code.write(buffer);
+        self.name.write(buffer);
+        self.topic_id.write(buffer);
+        self.is_internal.write(buffer);
+        self.partitions.write(buffer);
+        self.topic_authorized_operations.write(buffer);
+        TaggedFields::write_empty(buffer);
     }
 }
 
 pub struct DescribeTopicPartitionsResponsePartition {
-    error_code: i16,
-    partition_index: i32,
-    leader_id: i32,
-    leader_epoch: i32,
-    replica_nodes: Vec<i32>,
-    isr_nodes: Vec<i32>,
-    eligible_leader_replicas: Option<Vec<i32>>,
-    last_known_elr: Option<Vec<i32>>,
-    offline_replicas: Vec<i32>,
+    error_code: Int16,
+    partition_index: Int32,
+    leader_id: Int32,
+    leader_epoch: Int32,
+    replica_nodes: CompactArray<Int32>,
+    isr_nodes: CompactArray<Int32>,
+    eligible_leader_replicas: CompactArray<Int32>,
+    last_known_elr: CompactArray<Int32>,
+    offline_replicas: CompactArray<Int32>,
 }
-impl Writable for &DescribeTopicPartitionsResponsePartition {
+impl Readable for DescribeTopicPartitionsResponsePartition {
+    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+        let error_code = Int16::read(buffer)?;
+        let partition_index = Int32::read(buffer)?;
+        let leader_id = Int32::read(buffer)?;
+        let leader_epoch = Int32::read(buffer)?;
+        let replica_nodes = CompactArray::read(buffer)?;
+        if replica_nodes.value().is_none() {
+            return Err(protocol::Error::IllegalArgument(
+                "non-nullable field replicaNodes was serialized as null",
+            ));
+        }
+        let isr_nodes = CompactArray::read(buffer)?;
+        if isr_nodes.value().is_none() {
+            return Err(protocol::Error::IllegalArgument(
+                "non-nullable field isrNodes was serialized as null",
+            ));
+        }
+        let eligible_leader_replicas = CompactArray::read(buffer)?;
+        let last_known_elr = CompactArray::read(buffer)?;
+        let offline_replicas = CompactArray::read(buffer)?;
+        if offline_replicas.value().is_none() {
+            return Err(protocol::Error::IllegalArgument(
+                "non-nullable field offlineReplicas was serialized as null",
+            ));
+        }
+        Ok(Self {
+            error_code,
+            partition_index,
+            leader_id,
+            leader_epoch,
+            replica_nodes,
+            isr_nodes,
+            eligible_leader_replicas,
+            last_known_elr,
+            offline_replicas,
+        })
+    }
+}
+impl Writable for DescribeTopicPartitionsResponsePartition {
     fn write(&self, buffer: &mut impl BufMut) {
-        Int16(self.error_code).write(buffer);
-        Int32(self.partition_index).write(buffer);
-        Int32(self.leader_id).write(buffer);
-        Int32(self.leader_epoch).write(buffer);
-        CompactArray {
-            data: Some(self.replica_nodes.iter().map(|i| Int32(*i)).collect()),
-        }
-        .write(buffer);
-        CompactArray {
-            data: Some(self.isr_nodes.iter().map(|i| Int32(*i)).collect()),
-        }
-        .write(buffer);
-        CompactArray {
-            data: self
-                .eligible_leader_replicas
-                .as_ref()
-                .map(|v| v.iter().map(|i| Int32(*i)).collect()),
-        }
-        .write(buffer);
-        CompactArray {
-            data: self
-                .last_known_elr
-                .as_ref()
-                .map(|v| v.iter().map(|i| Int32(*i)).collect()),
-        }
-        .write(buffer);
-        CompactArray {
-            data: Some(self.offline_replicas.iter().map(|i| Int32(*i)).collect()),
-        }
-        .write(buffer);
-        buffer.put_u8(0); // empty _tagged_fields
+        self.error_code.write(buffer);
+        self.partition_index.write(buffer);
+        self.leader_id.write(buffer);
+        self.leader_epoch.write(buffer);
+        self.replica_nodes.write(buffer);
+        self.isr_nodes.write(buffer);
+        self.eligible_leader_replicas.write(buffer);
+        self.last_known_elr.write(buffer);
+        self.offline_replicas.write(buffer);
+        TaggedFields::write_empty(buffer);
     }
 }
 
@@ -177,21 +242,24 @@ pub fn process_request(buffer: &mut impl Buf, correlation_id: i32, version: i16)
             Ok(req) => {
                 let topics = req
                     .topics
+                    .value()
+                    .unwrap()
                     .iter()
                     .map(|tr| DescribeTopicPartitionsResponseTopic {
-                        error_code: 3,
-                        name: Some(tr.name.clone()),
-                        topic_id: uuid::Uuid::nil(),
-                        is_internal: false,
-                        partitions: vec![],
-                        topic_authorized_operations: 0xdf8,
+                        error_code: 3.into(),
+                        name: tr.name.as_str().ok().into(),
+                        topic_id: uuid::Uuid::nil().into(),
+                        is_internal: false.into(),
+                        partitions: vec![].into(),
+                        topic_authorized_operations: 0xdf8.into(),
                     })
-                    .collect();
+                    .collect::<Vec<_>>()
+                    .into();
                 Response::V0(V0Response {
-                    correlation_id,
-                    throttle_time_ms: 0,
+                    correlation_id: correlation_id.into(),
+                    throttle_time_ms: 0.into(),
                     topics,
-                    next_cursor: None,
+                    next_cursor: None.into(),
                 })
             }
         },
