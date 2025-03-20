@@ -43,7 +43,7 @@ impl TaggedFields {
         Self(value)
     }
 
-    pub fn values(&self) -> &[TaggedField] {
+    pub fn value(&self) -> &[TaggedField] {
         &self.0
     }
 

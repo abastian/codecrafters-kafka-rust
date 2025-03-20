@@ -247,7 +247,7 @@ pub fn process_request(buffer: &mut impl Buf, correlation_id: i32, version: i16)
                     .iter()
                     .map(|tr| DescribeTopicPartitionsResponseTopic {
                         error_code: 3.into(),
-                        name: tr.name.as_str().ok().into(),
+                        name: Some(tr.name.value()).into(),
                         topic_id: uuid::Uuid::nil().into(),
                         is_internal: false.into(),
                         partitions: vec![].into(),

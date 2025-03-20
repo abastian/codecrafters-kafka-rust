@@ -7,8 +7,8 @@ use super::{read_unsigned_varint, write_unsigned_varint};
 #[derive(Debug)]
 pub struct KafkaString(Bytes);
 impl KafkaString {
-    pub fn new(value: Bytes) -> Self {
-        Self(value)
+    pub fn value(&self) -> &Bytes {
+        &self.0
     }
 
     pub fn as_str(&self) -> Result<&str, protocol::Error> {
@@ -19,6 +19,11 @@ impl KafkaString {
         let sz = value.len() as i16;
         buffer.put_i16(sz);
         buffer.put(value);
+    }
+}
+impl From<&Bytes> for KafkaString {
+    fn from(value: &Bytes) -> Self {
+        Self(value.clone())
     }
 }
 impl From<&str> for KafkaString {
@@ -48,10 +53,9 @@ impl Writable for KafkaString {
 #[derive(Debug)]
 pub struct CompactKafkaString(Bytes);
 impl CompactKafkaString {
-    pub fn new(value: Bytes) -> Self {
-        Self(value)
+    pub fn value(&self) -> &Bytes {
+        &self.0
     }
-
     pub fn as_str(&self) -> Result<&str, protocol::Error> {
         std::str::from_utf8(self.0.as_ref()).map_err(|e| e.into())
     }
@@ -60,6 +64,11 @@ impl CompactKafkaString {
         let sz = value.len() as u32 + 1;
         write_unsigned_varint(sz, buffer);
         buffer.put(value);
+    }
+}
+impl From<&Bytes> for CompactKafkaString {
+    fn from(value: &Bytes) -> Self {
+        Self(value.clone())
     }
 }
 impl From<&str> for CompactKafkaString {
@@ -90,8 +99,8 @@ impl Writable for CompactKafkaString {
 #[derive(Debug)]
 pub struct NullableKafkaString(Option<Bytes>);
 impl NullableKafkaString {
-    pub fn new(value: Option<Bytes>) -> Self {
-        Self(value)
+    pub fn value(&self) -> Option<&Bytes> {
+        self.0.as_ref()
     }
 
     pub fn as_str(&self) -> Option<Result<&str, protocol::Error>> {
@@ -105,9 +114,9 @@ impl NullableKafkaString {
         buffer.put_i16(-1);
     }
 }
-impl From<&str> for NullableKafkaString {
-    fn from(value: &str) -> Self {
-        Self(Some(Bytes::copy_from_slice(value.as_bytes())))
+impl From<Option<&Bytes>> for NullableKafkaString {
+    fn from(value: Option<&Bytes>) -> Self {
+        Self(value.cloned())
     }
 }
 impl From<Option<&str>> for NullableKafkaString {
@@ -142,8 +151,8 @@ impl Writable for NullableKafkaString {
 #[derive(Debug)]
 pub struct CompactNullableKafkaString(Option<Bytes>);
 impl CompactNullableKafkaString {
-    pub fn new(value: Option<Bytes>) -> Self {
-        Self(value)
+    pub fn value(&self) -> Option<&Bytes> {
+        self.0.as_ref()
     }
 
     pub fn as_str(&self) -> Option<Result<&str, protocol::Error>> {
@@ -157,9 +166,9 @@ impl CompactNullableKafkaString {
         buffer.put_u8(0);
     }
 }
-impl From<&str> for CompactNullableKafkaString {
-    fn from(value: &str) -> Self {
-        Self(Some(Bytes::copy_from_slice(value.as_bytes())))
+impl From<Option<&Bytes>> for CompactNullableKafkaString {
+    fn from(value: Option<&Bytes>) -> Self {
+        Self(value.cloned())
     }
 }
 impl From<Option<&str>> for CompactNullableKafkaString {
