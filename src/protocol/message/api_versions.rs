@@ -14,6 +14,7 @@ use crate::{
     FINALIZED_FEATURES, FINALIZED_FEATURES_EPOCH, SUPPORTED_APIS, SUPPORTED_FEATURES,
 };
 
+#[derive(Debug, Clone, Copy)]
 pub struct V0Request;
 impl Readable for V0Request {
     fn read(_buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
@@ -21,6 +22,7 @@ impl Readable for V0Request {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct V3Request {
     client_software_name: CompactKafkaString,
     client_software_version: CompactKafkaString,
@@ -33,12 +35,12 @@ impl V3Request {
         }
     }
 
-    pub fn client_software_name(&self) -> Result<&str, protocol::Error> {
-        self.client_software_name.as_str()
+    pub fn client_software_name(&self) -> &CompactKafkaString {
+        &self.client_software_name
     }
 
-    pub fn client_software_version(&self) -> Result<&str, protocol::Error> {
-        self.client_software_version.as_str()
+    pub fn client_software_version(&self) -> &CompactKafkaString {
+        &self.client_software_version
     }
 }
 impl Readable for V3Request {
@@ -54,6 +56,7 @@ impl Readable for V3Request {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct SupportedFeatureKey {
     name: CompactKafkaString,
     min_version: Int16,
@@ -67,6 +70,18 @@ impl SupportedFeatureKey {
             max_version: max_version.into(),
         }
     }
+
+    pub fn name(&self) -> &CompactKafkaString {
+        &self.name
+    }
+
+    pub fn min_version(&self) -> Int16 {
+        self.min_version
+    }
+
+    pub fn max_version(&self) -> Int16 {
+        self.max_version
+    }
 }
 impl Writable for &SupportedFeatureKey {
     fn write(&self, buffer: &mut impl BufMut) {
@@ -76,6 +91,7 @@ impl Writable for &SupportedFeatureKey {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ApiKeyItem {
     api_key: Int16,
     min_version: Int16,
@@ -89,6 +105,18 @@ impl ApiKeyItem {
             max_version: max_version.into(),
         }
     }
+
+    pub fn api_key(&self) -> Int16 {
+        self.api_key
+    }
+
+    pub fn min_version(&self) -> Int16 {
+        self.min_version
+    }
+
+    pub fn max_version(&self) -> Int16 {
+        self.max_version
+    }
 }
 impl Writable for &ApiKeyItem {
     fn write(&self, buffer: &mut impl BufMut) {
@@ -99,6 +127,7 @@ impl Writable for &ApiKeyItem {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct FinalizedFeatureKey {
     name: CompactKafkaString,
     max_version_level: Int16,
@@ -112,6 +141,18 @@ impl FinalizedFeatureKey {
             min_version_level: min_version_level.into(),
         }
     }
+
+    pub fn name(&self) -> &CompactKafkaString {
+        &self.name
+    }
+
+    pub fn max_version_level(&self) -> Int16 {
+        self.max_version_level
+    }
+
+    pub fn min_version_level(&self) -> Int16 {
+        self.min_version_level
+    }
 }
 impl Writable for &FinalizedFeatureKey {
     fn write(&self, buffer: &mut impl BufMut) {
@@ -121,6 +162,7 @@ impl Writable for &FinalizedFeatureKey {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct V0Response<'a> {
     correlation_id: Int32,
     api_keys: Result<&'a HashMap<i16, ApiKeyItem>, Int16>,
@@ -139,8 +181,16 @@ impl<'a> V0Response<'a> {
             api_keys: Ok(api_keys),
         }
     }
+
+    pub fn correlation_id(&self) -> Int32 {
+        self.correlation_id
+    }
+
+    pub fn api_keys(&self) -> Result<&'a HashMap<i16, ApiKeyItem>, Int16> {
+        self.api_keys
+    }
 }
-impl<'a> Writable for V0Response<'a> {
+impl Writable for V0Response<'_> {
     fn write(&self, buffer: &mut impl BufMut) {
         self.correlation_id.write(buffer);
         match &self.api_keys {
@@ -160,11 +210,29 @@ impl<'a> Writable for V0Response<'a> {
     }
 }
 
-struct V1ResponseData<'a> {
+#[derive(Debug, Clone)]
+pub struct V1ResponseData<'a> {
     api_keys: &'a HashMap<i16, ApiKeyItem>,
     throttle_time_ms: Int32,
 }
+impl<'a> V1ResponseData<'a> {
+    pub fn new(api_keys: &'a HashMap<i16, ApiKeyItem>, throttle_time_ms: i32) -> Self {
+        Self {
+            api_keys,
+            throttle_time_ms: throttle_time_ms.into(),
+        }
+    }
 
+    pub fn api_keys(&self) -> &HashMap<i16, ApiKeyItem> {
+        self.api_keys
+    }
+
+    pub fn throttle_time_ms(&self) -> Int32 {
+        self.throttle_time_ms
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct V1Response<'a> {
     correlation_id: Int32,
     data: Result<V1ResponseData<'a>, Int16>,
@@ -190,8 +258,16 @@ impl<'a> V1Response<'a> {
             }),
         }
     }
+
+    pub fn correlation_id(&self) -> Int32 {
+        self.correlation_id
+    }
+
+    pub fn data(&self) -> &Result<V1ResponseData<'a>, Int16> {
+        &self.data
+    }
 }
-impl<'a> Writable for V1Response<'a> {
+impl Writable for V1Response<'_> {
     fn write(&self, buffer: &mut impl BufMut) {
         self.correlation_id.write(buffer);
         match &self.data {
@@ -216,7 +292,8 @@ impl<'a> Writable for V1Response<'a> {
     }
 }
 
-struct V3ResponseData<'a> {
+#[derive(Debug, Clone)]
+pub struct V3ResponseData<'a> {
     api_keys: &'a HashMap<i16, ApiKeyItem>,
     throttle_time_ms: Int32,
 
@@ -225,7 +302,51 @@ struct V3ResponseData<'a> {
     finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
     zk_migration_ready: Boolean,
 }
+impl<'a> V3ResponseData<'a> {
+    pub fn new(
+        api_keys: &'a HashMap<i16, ApiKeyItem>,
+        throttle_time_ms: i32,
+        supported_features: &'a HashMap<String, SupportedFeatureKey>,
+        finalized_features_epoch: Option<i64>,
+        finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
+        zk_migration_ready: bool,
+    ) -> Self {
+        Self {
+            api_keys,
+            throttle_time_ms: throttle_time_ms.into(),
+            supported_features,
+            finalized_features_epoch: finalized_features_epoch.map(Int64::from),
+            finalized_features,
+            zk_migration_ready: zk_migration_ready.into(),
+        }
+    }
 
+    pub fn api_keys(&self) -> &HashMap<i16, ApiKeyItem> {
+        self.api_keys
+    }
+
+    pub fn throttle_time_ms(&self) -> Int32 {
+        self.throttle_time_ms
+    }
+
+    pub fn supported_features(&self) -> &HashMap<String, SupportedFeatureKey> {
+        self.supported_features
+    }
+
+    pub fn finalized_features_epoch(&self) -> Option<Int64> {
+        self.finalized_features_epoch
+    }
+
+    pub fn finalized_features(&self) -> &HashMap<String, FinalizedFeatureKey> {
+        self.finalized_features
+    }
+
+    pub fn zk_migration_ready(&self) -> Boolean {
+        self.zk_migration_ready
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct V3Response<'a> {
     correlation_id: Int32,
     data: Result<V3ResponseData<'a>, Int16>,
@@ -259,8 +380,16 @@ impl<'a> V3Response<'a> {
             }),
         }
     }
+
+    pub fn correlation_id(&self) -> Int32 {
+        self.correlation_id
+    }
+
+    pub fn data(&self) -> &Result<V3ResponseData, Int16> {
+        &self.data
+    }
 }
-impl<'a> Writable for V3Response<'a> {
+impl Writable for V3Response<'_> {
     fn write(&self, buffer: &mut impl BufMut) {
         self.correlation_id.write(buffer);
         match &self.data {
@@ -334,6 +463,7 @@ impl<'a> Writable for V3Response<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Request {
     V0(V0Request),
     V1(V0Request),
@@ -342,6 +472,7 @@ pub enum Request {
     V4(V3Request),
 }
 
+#[derive(Debug, Clone)]
 pub enum Response<'a> {
     V0(V0Response<'a>),
     V1(V1Response<'a>),
@@ -349,7 +480,7 @@ pub enum Response<'a> {
     V3(V3Response<'a>),
     V4(V3Response<'a>),
 }
-impl<'a> Writable for Response<'a> {
+impl Writable for Response<'_> {
     fn write(&self, buffer: &mut impl BufMut) {
         match self {
             Response::V0(resp) => resp.write(buffer),

@@ -15,10 +15,11 @@ pub use tagged_fields::{TaggedField, TaggedFields};
 
 use super::{Readable, Writable};
 
+#[derive(Debug, Clone, Copy)]
 pub struct KafkaUuid(uuid::Uuid);
 impl KafkaUuid {
-    pub fn value(&self) -> Self {
-        Self(self.0)
+    pub fn value(&self) -> uuid::Uuid {
+        self.0
     }
 }
 impl From<uuid::Uuid> for KafkaUuid {
@@ -37,12 +38,22 @@ impl Writable for KafkaUuid {
     }
 }
 
+#[derive(Debug)]
 pub struct NullableRecord<T>(Option<T>);
 impl<T> NullableRecord<T> {
     pub fn value(&self) -> Option<&T> {
         self.0.as_ref()
     }
 }
+impl<T> Clone for NullableRecord<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<T> Copy for NullableRecord<T> where T: Copy + Clone {}
 impl<T> From<Option<T>> for NullableRecord<T> {
     fn from(value: Option<T>) -> Self {
         Self(value)

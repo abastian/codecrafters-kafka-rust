@@ -4,7 +4,7 @@ use crate::protocol::{self, Readable, Writable};
 
 use super::{read_unsigned_varint, write_unsigned_varint};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KafkaString(Bytes);
 impl KafkaString {
     pub fn value(&self) -> &Bytes {
@@ -50,7 +50,7 @@ impl Writable for KafkaString {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompactKafkaString(Bytes);
 impl CompactKafkaString {
     pub fn value(&self) -> &Bytes {
@@ -96,7 +96,7 @@ impl Writable for CompactKafkaString {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NullableKafkaString(Option<Bytes>);
 impl NullableKafkaString {
     pub fn value(&self) -> Option<&Bytes> {
@@ -148,7 +148,7 @@ impl Writable for NullableKafkaString {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompactNullableKafkaString(Option<Bytes>);
 impl CompactNullableKafkaString {
     pub fn value(&self) -> Option<&Bytes> {

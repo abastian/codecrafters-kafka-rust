@@ -2,7 +2,7 @@ use bytes::{Buf, BufMut};
 
 use crate::protocol::{self, Readable, Writable};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Boolean(bool);
 impl Boolean {
     pub fn value(&self) -> bool {
@@ -32,7 +32,7 @@ impl Writable for Boolean {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Int8(i8);
 impl Int8 {
     pub fn value(&self) -> i8 {
@@ -61,7 +61,7 @@ impl Writable for Int8 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Int16(i16);
 impl Int16 {
     pub fn value(&self) -> i16 {
@@ -90,7 +90,7 @@ impl Writable for Int16 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Int32(i32);
 impl Int32 {
     pub fn value(&self) -> i32 {
@@ -119,7 +119,7 @@ impl Writable for Int32 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Int64(i64);
 impl Int64 {
     pub fn value(&self) -> i64 {
@@ -148,7 +148,7 @@ impl Writable for Int64 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct UInt16(u16);
 impl UInt16 {
     pub fn value(&self) -> u16 {
@@ -177,7 +177,7 @@ impl Writable for UInt16 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct UInt32(u32);
 impl UInt32 {
     pub fn value(&self) -> u32 {
@@ -294,7 +294,7 @@ pub(crate) fn read_unsigned_varlong(buffer: &mut impl Buf) -> Result<u64, protoc
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct VarInt(i32);
 impl VarInt {
     pub fn value(&self) -> i32 {
@@ -324,7 +324,7 @@ impl Writable for VarInt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct VarLong(i64);
 impl VarLong {
     pub fn value(&self) -> i64 {
@@ -354,7 +354,7 @@ impl Writable for VarLong {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Float64(f64);
 impl Float64 {
     pub fn value(&self) -> f64 {

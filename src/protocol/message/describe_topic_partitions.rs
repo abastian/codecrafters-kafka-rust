@@ -9,6 +9,7 @@ use crate::protocol::{
     Readable, Writable,
 };
 
+#[derive(Debug, Clone)]
 pub struct V0Request {
     topics: CompactArray<TopicRequest>,
     response_partition_limit: Int32,
@@ -21,10 +22,22 @@ impl V0Request {
         cursor: Option<Cursor>,
     ) -> Self {
         V0Request {
-            topics: topics.into(),
+            topics: Some(topics).into(),
             response_partition_limit: response_partition_limit.into(),
             cursor: cursor.into(),
         }
+    }
+
+    pub fn topics(&self) -> &[TopicRequest] {
+        self.topics.value().unwrap()
+    }
+
+    pub fn response_partition_limit(&self) -> Int32 {
+        self.response_partition_limit
+    }
+
+    pub fn cursor(&self) -> Option<&Cursor> {
+        self.cursor.value()
     }
 }
 impl Readable for V0Request {
@@ -46,8 +59,18 @@ impl Readable for V0Request {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TopicRequest {
     name: CompactKafkaString,
+}
+impl TopicRequest {
+    pub fn new(name: &str) -> Self {
+        TopicRequest { name: name.into() }
+    }
+
+    pub fn name(&self) -> &CompactKafkaString {
+        &self.name
+    }
 }
 impl Readable for TopicRequest {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
@@ -57,9 +80,26 @@ impl Readable for TopicRequest {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Cursor {
     topic_name: CompactKafkaString,
     partition_index: Int32,
+}
+impl Cursor {
+    pub fn new(topic_name: &str, partition_index: i32) -> Self {
+        Cursor {
+            topic_name: topic_name.into(),
+            partition_index: partition_index.into(),
+        }
+    }
+
+    pub fn topic_name(&self) -> &CompactKafkaString {
+        &self.topic_name
+    }
+
+    pub fn partition_index(&self) -> Int32 {
+        self.partition_index
+    }
 }
 impl Readable for Cursor {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
@@ -80,17 +120,54 @@ impl Writable for Cursor {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct V0Response {
     correlation_id: Int32,
     throttle_time_ms: Int32,
     topics: CompactArray<DescribeTopicPartitionsResponseTopic>,
     next_cursor: NullableRecord<Cursor>,
 }
+impl V0Response {
+    pub fn new(
+        correlation_id: i32,
+        throttle_time_ms: i32,
+        topics: Vec<DescribeTopicPartitionsResponseTopic>,
+        next_cursor: Option<Cursor>,
+    ) -> Self {
+        V0Response {
+            correlation_id: correlation_id.into(),
+            throttle_time_ms: throttle_time_ms.into(),
+            topics: Some(topics).into(),
+            next_cursor: next_cursor.into(),
+        }
+    }
+
+    pub fn correlation_id(&self) -> Int32 {
+        self.correlation_id
+    }
+
+    pub fn throttle_time_ms(&self) -> Int32 {
+        self.throttle_time_ms
+    }
+
+    pub fn topics(&self) -> &[DescribeTopicPartitionsResponseTopic] {
+        self.topics.value().unwrap()
+    }
+
+    pub fn next_cursor(&self) -> Option<&Cursor> {
+        self.next_cursor.value()
+    }
+}
 impl Readable for V0Response {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
         let correlation_id = Int32::read(buffer)?;
         let throttle_time_ms = Int32::read(buffer)?;
         let topics = CompactArray::read(buffer)?;
+        if topics.value().is_none() {
+            return Err(protocol::Error::IllegalArgument(
+                "non-nullable field topics was serialized as null",
+            ));
+        }
         let next_cursor = NullableRecord::read(buffer)?;
         Ok(V0Response {
             correlation_id,
@@ -111,6 +188,7 @@ impl Writable for V0Response {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct DescribeTopicPartitionsResponseTopic {
     error_code: Int16,
     name: CompactNullableKafkaString,
@@ -118,6 +196,49 @@ pub struct DescribeTopicPartitionsResponseTopic {
     is_internal: Boolean,
     partitions: CompactArray<DescribeTopicPartitionsResponsePartition>,
     topic_authorized_operations: Int32,
+}
+impl DescribeTopicPartitionsResponseTopic {
+    pub fn new(
+        error_code: i16,
+        name: Option<&str>,
+        topic_id: uuid::Uuid,
+        is_internal: bool,
+        partitions: Vec<DescribeTopicPartitionsResponsePartition>,
+        topic_authorized_operations: i32,
+    ) -> Self {
+        Self {
+            error_code: error_code.into(),
+            name: name.into(),
+            topic_id: topic_id.into(),
+            is_internal: is_internal.into(),
+            partitions: Some(partitions).into(),
+            topic_authorized_operations: topic_authorized_operations.into(),
+        }
+    }
+
+    pub fn error_code(&self) -> Int16 {
+        self.error_code
+    }
+
+    pub fn name(&self) -> &CompactNullableKafkaString {
+        &self.name
+    }
+
+    pub fn topic_id(&self) -> KafkaUuid {
+        self.topic_id
+    }
+
+    pub fn is_internal(&self) -> Boolean {
+        self.is_internal
+    }
+
+    pub fn partitions(&self) -> &CompactArray<DescribeTopicPartitionsResponsePartition> {
+        &self.partitions
+    }
+
+    pub fn topic_authorized_operations(&self) -> Int32 {
+        self.topic_authorized_operations
+    }
 }
 impl Readable for DescribeTopicPartitionsResponseTopic {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
@@ -155,6 +276,7 @@ impl Writable for DescribeTopicPartitionsResponseTopic {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct DescribeTopicPartitionsResponsePartition {
     error_code: Int16,
     partition_index: Int32,
@@ -165,6 +287,89 @@ pub struct DescribeTopicPartitionsResponsePartition {
     eligible_leader_replicas: CompactArray<Int32>,
     last_known_elr: CompactArray<Int32>,
     offline_replicas: CompactArray<Int32>,
+}
+impl DescribeTopicPartitionsResponsePartition {
+    pub fn new(
+        error_code: i16,
+        partition_index: i32,
+        leader_id: i32,
+        leader_epoch: i32,
+        replica_nodes: Vec<i32>,
+        isr_nodes: Vec<i32>,
+        eligible_leader_replicas: Option<Vec<i32>>,
+        last_known_elr: Option<Vec<i32>>,
+        offline_replicas: Vec<i32>,
+    ) -> Self {
+        Self {
+            error_code: error_code.into(),
+            partition_index: partition_index.into(),
+            leader_id: leader_id.into(),
+            leader_epoch: leader_epoch.into(),
+            replica_nodes: Some(
+                replica_nodes
+                    .iter()
+                    .map(|&id| id.into())
+                    .collect::<Vec<Int32>>(),
+            )
+            .into(),
+            isr_nodes: Some(
+                isr_nodes
+                    .iter()
+                    .map(|&id| id.into())
+                    .collect::<Vec<Int32>>(),
+            )
+            .into(),
+            eligible_leader_replicas: eligible_leader_replicas
+                .map(|el| el.iter().map(|&id| id.into()).collect::<Vec<Int32>>())
+                .into(),
+            last_known_elr: last_known_elr
+                .map(|el| el.iter().map(|&id| id.into()).collect::<Vec<Int32>>())
+                .into(),
+            offline_replicas: Some(
+                offline_replicas
+                    .iter()
+                    .map(|&id| id.into())
+                    .collect::<Vec<Int32>>(),
+            )
+            .into(),
+        }
+    }
+
+    pub fn error_code(&self) -> Int16 {
+        self.error_code
+    }
+
+    pub fn partition_index(&self) -> Int32 {
+        self.partition_index
+    }
+
+    pub fn leader_id(&self) -> Int32 {
+        self.leader_id
+    }
+
+    pub fn leader_epoch(&self) -> Int32 {
+        self.leader_epoch
+    }
+
+    pub fn replica_nodes(&self) -> &CompactArray<Int32> {
+        &self.replica_nodes
+    }
+
+    pub fn isr_nodes(&self) -> &CompactArray<Int32> {
+        &self.isr_nodes
+    }
+
+    pub fn eligible_leader_replicas(&self) -> &CompactArray<Int32> {
+        &self.eligible_leader_replicas
+    }
+
+    pub fn last_known_elr(&self) -> &CompactArray<Int32> {
+        &self.last_known_elr
+    }
+
+    pub fn offline_replicas(&self) -> &CompactArray<Int32> {
+        &self.offline_replicas
+    }
 }
 impl Readable for DescribeTopicPartitionsResponsePartition {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
@@ -240,21 +445,20 @@ pub fn process_request(buffer: &mut impl Buf, correlation_id: i32, version: i16)
         0 => match V0Request::read(buffer) {
             Err(_) => todo!(),
             Ok(req) => {
-                let topics = req
-                    .topics
-                    .value()
-                    .unwrap()
-                    .iter()
-                    .map(|tr| DescribeTopicPartitionsResponseTopic {
-                        error_code: 3.into(),
-                        name: Some(tr.name.value()).into(),
-                        topic_id: uuid::Uuid::nil().into(),
-                        is_internal: false.into(),
-                        partitions: vec![].into(),
-                        topic_authorized_operations: 0xdf8.into(),
-                    })
-                    .collect::<Vec<_>>()
-                    .into();
+                let topics = Some(
+                    req.topics()
+                        .iter()
+                        .map(|tr| DescribeTopicPartitionsResponseTopic {
+                            error_code: 3.into(),
+                            name: Some(tr.name.value()).into(),
+                            topic_id: uuid::Uuid::nil().into(),
+                            is_internal: false.into(),
+                            partitions: Some(vec![]).into(),
+                            topic_authorized_operations: 0xdf8.into(),
+                        })
+                        .collect::<Vec<_>>(),
+                )
+                .into();
                 Response::V0(V0Response {
                     correlation_id: correlation_id.into(),
                     throttle_time_ms: 0.into(),
@@ -263,6 +467,6 @@ pub fn process_request(buffer: &mut impl Buf, correlation_id: i32, version: i16)
                 })
             }
         },
-        _ => todo!(),
+        _ => unreachable!(),
     }
 }

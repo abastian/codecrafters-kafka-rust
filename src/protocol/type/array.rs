@@ -22,6 +22,19 @@ impl<T> Array<T> {
         }
     }
 }
+impl<T> Clone for Array<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<T> From<Option<Vec<T>>> for Array<T> {
+    fn from(value: Option<Vec<T>>) -> Self {
+        Self(value)
+    }
+}
 impl<T> Readable for Array<T>
 where
     T: Readable,
@@ -60,8 +73,8 @@ where
 #[derive(Debug)]
 pub struct CompactArray<T>(Option<Vec<T>>);
 impl<T> CompactArray<T> {
-    pub fn value(&self) -> Option<&Vec<T>> {
-        self.0.as_ref()
+    pub fn value(&self) -> Option<&[T]> {
+        self.0.as_ref().map(|v| v.as_ref())
     }
 
     #[inline(always)]
@@ -82,14 +95,17 @@ impl<T> CompactArray<T> {
         buffer.put_u8(0);
     }
 }
+impl<T> Clone for CompactArray<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 impl<T> From<Option<Vec<T>>> for CompactArray<T> {
     fn from(value: Option<Vec<T>>) -> Self {
         Self(value)
-    }
-}
-impl<T> From<Vec<T>> for CompactArray<T> {
-    fn from(value: Vec<T>) -> Self {
-        Self(Some(value))
     }
 }
 impl<T> Readable for CompactArray<T>
