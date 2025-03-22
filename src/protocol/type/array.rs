@@ -5,14 +5,10 @@ use crate::protocol::{self, r#type::read_unsigned_varint, Readable, Writable};
 use super::write_unsigned_varint;
 
 #[derive(Debug)]
-pub struct Array<T>(Vec<T>);
+pub struct Array<T>(Option<Vec<T>>);
 impl<T> Array<T> {
-    pub fn new(value: Vec<T>) -> Self {
-        Self(value)
-    }
-
-    pub fn data(&self) -> &Vec<T> {
-        &self.0
+    pub fn data(&self) -> Option<&Vec<T>> {
+        self.0.as_ref()
     }
 
     pub(crate) fn write(buffer: &mut impl BufMut, value: &[T])
@@ -31,9 +27,12 @@ where
     T: Readable,
 {
     fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let sz = read_unsigned_varint(buffer)?;
+        let sz = buffer.get_i32();
+        if sz < 0 {
+            return Ok(Self(None));
+        }
         if sz == 0 {
-            return Ok(Self(vec![]));
+            return Ok(Self(Some(vec![])));
         }
 
         let sz = sz as usize;
@@ -42,7 +41,7 @@ where
             let item = T::read(buffer)?;
             value.push(item);
         }
-        Ok(Self(value))
+        Ok(Self(Some(value)))
     }
 }
 impl<T> Writable for Array<T>
@@ -50,7 +49,11 @@ where
     T: Writable,
 {
     fn write(&self, buffer: &mut impl BufMut) {
-        Self::write(buffer, &self.0);
+        if let Some(v) = &self.0 {
+            Self::write(buffer, v);
+        } else {
+            buffer.put_i32(-1);
+        }
     }
 }
 
