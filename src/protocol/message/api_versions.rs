@@ -67,9 +67,7 @@ impl Request {
 }
 impl ReadableVersion for Request {
     fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
-        let (client_software_name, client_software_version) = if version < 3 {
-            (None, None)
-        } else {
+        let (client_software_name, client_software_version) = if (3..=4).contains(&version) {
             let client_software_name = CompactKafkaString::read_result_inner(buffer)?.ok_or(
                 protocol::Error::IllegalArgument(
                     "non-nullable field clientSoftwareName was serialized as null",
@@ -81,8 +79,10 @@ impl ReadableVersion for Request {
                 ),
             )?;
             (Some(client_software_name), Some(client_software_version))
+        } else {
+            (None, None)
         };
-        if version >= 3 {
+        if (3..=4).contains(&version) {
             let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
         }
 
