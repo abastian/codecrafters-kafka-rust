@@ -4,37 +4,23 @@ mod string;
 mod tagged_fields;
 
 pub use array::{Array, CompactArray};
-pub(crate) use numeric::{
-    read_unsigned_varint, read_unsigned_varlong, write_unsigned_varint, write_unsigned_varlong,
-};
-pub use numeric::{Boolean, Float64, Int16, Int32, Int64, Int8, UInt16, UInt32, VarInt, VarLong};
-pub use string::{
-    CompactKafkaString, CompactNullableKafkaString, KafkaString, NullableKafkaString,
-};
+use bytes::{Buf, BufMut};
+pub(crate) use numeric::{read_unsigned_varint, write_unsigned_varint};
+pub use numeric::{VarInt, VarLong};
+pub use string::{CompactKafkaString, KafkaString};
 pub use tagged_fields::{TaggedField, TaggedFields};
+use uuid::Uuid;
 
-use super::{Readable, Writable};
+use super::{Readable, ReadableResult, ReadableVersion, Writable};
 
-#[derive(Debug, Clone, Copy)]
-pub struct KafkaUuid(uuid::Uuid);
-impl KafkaUuid {
-    pub fn value(&self) -> uuid::Uuid {
-        self.0
+impl Readable for Uuid {
+    fn read(buffer: &mut impl Buf) -> Uuid {
+        Uuid::from_u128(buffer.get_u128())
     }
 }
-impl From<uuid::Uuid> for KafkaUuid {
-    fn from(value: uuid::Uuid) -> Self {
-        Self(value)
-    }
-}
-impl Readable for KafkaUuid {
-    fn read(buffer: &mut impl bytes::Buf) -> Result<Self, super::Error> {
-        Ok(Self(uuid::Uuid::from_u128(buffer.get_u128())))
-    }
-}
-impl Writable for KafkaUuid {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        buffer.put_u128(self.0.as_u128());
+impl Writable for Uuid {
+    fn write(&self, buffer: &mut impl BufMut) {
+        buffer.put_u128(self.as_u128());
     }
 }
 
@@ -45,6 +31,47 @@ impl<T> NullableRecord<T> {
         self.0.as_ref()
     }
 }
+impl<T> NullableRecord<T>
+where
+    T: ReadableResult,
+{
+    pub(crate) fn read_inner(buffer: &mut impl Buf) -> Result<Option<T>, super::Error> {
+        if i8::read(buffer) == -1 {
+            Ok(None)
+        } else {
+            Ok(Some(T::read_result(buffer)?))
+        }
+    }
+}
+impl<T> NullableRecord<T>
+where
+    T: ReadableVersion,
+{
+    pub(crate) fn read_version(
+        buffer: &mut impl Buf,
+        version: i16,
+    ) -> Result<Option<T>, super::Error> {
+        if i8::read(buffer) == -1 {
+            Ok(None)
+        } else {
+            Ok(Some(T::read_version(buffer, version)?))
+        }
+    }
+}
+impl<T> NullableRecord<T>
+where
+    T: Writable,
+{
+    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: Option<&T>) {
+        match value {
+            Some(value) => {
+                0u8.write(buffer);
+                value.write(buffer);
+            }
+            None => (-1i8).write(buffer),
+        }
+    }
+}
 impl<T> Clone for NullableRecord<T>
 where
     T: Clone,
@@ -53,35 +80,24 @@ where
         Self(self.0.clone())
     }
 }
-impl<T> Copy for NullableRecord<T> where T: Copy + Clone {}
 impl<T> From<Option<T>> for NullableRecord<T> {
     fn from(value: Option<T>) -> Self {
         Self(value)
     }
 }
-impl<T> Readable for NullableRecord<T>
+impl<T> ReadableResult for NullableRecord<T>
 where
-    T: Readable,
+    T: ReadableResult,
 {
-    fn read(buffer: &mut impl bytes::Buf) -> Result<Self, super::Error> {
-        if buffer.get_i8() == -1 {
-            Ok(Self(None))
-        } else {
-            Ok(Self(Some(T::read(buffer)?)))
-        }
+    fn read_result(buffer: &mut impl Buf) -> Result<Self, super::Error> {
+        NullableRecord::read_inner(buffer).map(|res| res.into())
     }
 }
-impl<T> Writable for NullableRecord<T>
+impl<T> ReadableVersion for NullableRecord<T>
 where
-    T: Writable,
+    T: ReadableVersion,
 {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
-        match self.0 {
-            Some(ref value) => {
-                buffer.put_u8(0);
-                value.write(buffer);
-            }
-            None => buffer.put_i8(-1),
-        }
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, super::Error> {
+        NullableRecord::read_version(buffer, version).map(|res| res.into())
     }
 }

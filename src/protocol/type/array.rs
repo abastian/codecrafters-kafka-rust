@@ -1,24 +1,75 @@
 use bytes::{Buf, BufMut};
 
-use crate::protocol::{self, r#type::read_unsigned_varint, Readable, Writable};
+use crate::protocol::{self, Readable, ReadableResult, ReadableVersion, Writable};
 
-use super::write_unsigned_varint;
+use super::{read_unsigned_varint, write_unsigned_varint};
 
 #[derive(Debug)]
 pub struct Array<T>(Option<Vec<T>>);
 impl<T> Array<T> {
-    pub fn data(&self) -> Option<&Vec<T>> {
-        self.0.as_ref()
+    pub fn value(&self) -> Option<&[T]> {
+        self.0.as_deref()
     }
 
-    pub(crate) fn write(buffer: &mut impl BufMut, value: &[T])
-    where
-        T: Writable,
-    {
-        let sz = value.len() as i32;
-        buffer.put_i32(sz);
-        for t in value {
-            t.write(buffer);
+    pub(crate) fn write_none(buffer: &mut impl BufMut) {
+        (-1i8).write(buffer);
+    }
+}
+impl<T> Array<T>
+where
+    T: Readable,
+{
+    pub(crate) fn read_inner(buffer: &mut impl Buf) -> Option<Vec<T>> {
+        let sz = i32::read(buffer);
+        if sz < 0 {
+            return None;
+        }
+        if sz == 0 {
+            return Some(vec![]);
+        }
+
+        let mut value = Vec::with_capacity(sz as usize);
+        for _ in 0..sz {
+            value.push(T::read(buffer));
+        }
+        Some(value)
+    }
+}
+impl<T> Array<T>
+where
+    T: ReadableVersion,
+{
+    pub(crate) fn read_version_inner(
+        buffer: &mut impl Buf,
+        version: i16,
+    ) -> Result<Option<Vec<T>>, protocol::Error> {
+        let sz = i32::read(buffer);
+        if sz < 0 {
+            return Ok(None);
+        }
+        if sz == 0 {
+            return Ok(Some(vec![]));
+        }
+
+        let mut value = Vec::with_capacity(sz as usize);
+        for _ in 0..sz {
+            value.push(T::read_version(buffer, version)?);
+        }
+        Ok(Some(value))
+    }
+}
+impl<T> Array<T>
+where
+    T: Writable,
+{
+    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: Option<&[T]>) {
+        if let Some(value) = value {
+            (value.len() as i32).write(buffer);
+            for t in value {
+                t.write(buffer);
+            }
+        } else {
+            Self::write_none(buffer);
         }
     }
 }
@@ -39,22 +90,16 @@ impl<T> Readable for Array<T>
 where
     T: Readable,
 {
-    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let sz = buffer.get_i32();
-        if sz < 0 {
-            return Ok(Self(None));
-        }
-        if sz == 0 {
-            return Ok(Self(Some(vec![])));
-        }
-
-        let sz = sz as usize;
-        let mut value = Vec::with_capacity(sz);
-        for _ in 0..sz {
-            let item = T::read(buffer)?;
-            value.push(item);
-        }
-        Ok(Self(Some(value)))
+    fn read(buffer: &mut impl Buf) -> Self {
+        Self(Self::read_inner(buffer))
+    }
+}
+impl<T> ReadableVersion for Array<T>
+where
+    T: ReadableVersion,
+{
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        Ok(Self(Self::read_version_inner(buffer, version)?))
     }
 }
 impl<T> Writable for Array<T>
@@ -62,11 +107,7 @@ where
     T: Writable,
 {
     fn write(&self, buffer: &mut impl BufMut) {
-        if let Some(v) = &self.0 {
-            Self::write(buffer, v);
-        } else {
-            buffer.put_i32(-1);
-        }
+        Self::write_inner(buffer, self.value());
     }
 }
 
@@ -74,25 +115,92 @@ where
 pub struct CompactArray<T>(Option<Vec<T>>);
 impl<T> CompactArray<T> {
     pub fn value(&self) -> Option<&[T]> {
-        self.0.as_ref().map(|v| v.as_ref())
+        self.0.as_deref()
     }
 
-    #[inline(always)]
-    pub(crate) fn write(buffer: &mut impl BufMut, data: &[T])
-    where
-        T: Writable,
-    {
-        let sz = data.len();
-        write_unsigned_varint(sz as u32 + 1, buffer);
-
-        for t in data {
-            t.write(buffer);
+    pub(crate) fn write_none(buffer: &mut impl BufMut) {
+        0u8.write(buffer);
+    }
+}
+impl<T> CompactArray<T>
+where
+    T: Readable,
+{
+    pub(crate) fn read_inner(buffer: &mut impl Buf) -> Result<Option<Vec<T>>, protocol::Error> {
+        let sz = read_unsigned_varint(buffer)?;
+        if sz == 0 {
+            return Ok(Some(vec![]));
         }
-    }
 
-    #[inline(always)]
-    pub(crate) fn write_empty(buffer: &mut impl BufMut) {
-        buffer.put_u8(0);
+        let mut data = Vec::with_capacity(sz as usize - 1);
+        for _ in 0..sz - 1 {
+            data.push(T::read(buffer));
+        }
+        Ok(Some(data))
+    }
+}
+impl<T> CompactArray<T>
+where
+    T: ReadableResult,
+{
+    pub(crate) fn read_result_inner(
+        buffer: &mut impl Buf,
+    ) -> Result<Option<Vec<T>>, protocol::Error> {
+        let sz = read_unsigned_varint(buffer)?;
+        if sz == 0 {
+            return Ok(None);
+        }
+        if sz == 1 {
+            return Ok(Some(vec![]));
+        }
+
+        let sz = sz as usize - 1;
+        let mut data = Vec::with_capacity(sz);
+        for _ in 0..sz {
+            data.push(T::read_result(buffer)?);
+        }
+        Ok(Some(data))
+    }
+}
+impl<T> CompactArray<T>
+where
+    T: ReadableVersion,
+{
+    pub(crate) fn read_version_inner(
+        buffer: &mut impl Buf,
+        version: i16,
+    ) -> Result<Option<Vec<T>>, protocol::Error> {
+        let sz = read_unsigned_varint(buffer)?;
+        if sz == 0 {
+            return Ok(None);
+        }
+        if sz == 1 {
+            return Ok(Some(vec![]));
+        }
+
+        let sz = sz as usize - 1;
+        let mut data = Vec::with_capacity(sz);
+        for _ in 0..sz {
+            data.push(T::read_version(buffer, version)?);
+        }
+        Ok(Some(data))
+    }
+}
+impl<T> CompactArray<T>
+where
+    T: Writable,
+{
+    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: Option<&[T]>) {
+        if let Some(value) = value {
+            let sz = value.len();
+            write_unsigned_varint(buffer, sz as u32 + 1);
+
+            for t in value {
+                t.write(buffer);
+            }
+        } else {
+            Self::write_none(buffer);
+        }
     }
 }
 impl<T> Clone for CompactArray<T>
@@ -108,23 +216,20 @@ impl<T> From<Option<Vec<T>>> for CompactArray<T> {
         Self(value)
     }
 }
-impl<T> Readable for CompactArray<T>
+impl<T> ReadableResult for CompactArray<T>
 where
-    T: Readable,
+    T: ReadableResult,
 {
-    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let sz = read_unsigned_varint(buffer)?;
-        if sz == 0 {
-            return Ok(Self(None));
-        }
-
-        let sz = sz as usize - 1;
-        let mut value = Vec::with_capacity(sz);
-        for _ in 0..sz {
-            let item = T::read(buffer)?;
-            value.push(item);
-        }
-        Ok(Self(Some(value)))
+    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+        Ok(Self(Self::read_result_inner(buffer)?))
+    }
+}
+impl<T> ReadableVersion for CompactArray<T>
+where
+    T: ReadableVersion,
+{
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        Ok(Self(Self::read_version_inner(buffer, version)?))
     }
 }
 impl<T> Writable for CompactArray<T>
@@ -132,10 +237,6 @@ where
     T: Writable,
 {
     fn write(&self, buffer: &mut impl BufMut) {
-        if let Some(value) = &self.0 {
-            Self::write(buffer, value);
-        } else {
-            Self::write_empty(buffer);
-        }
+        Self::write_inner(buffer, self.value());
     }
 }

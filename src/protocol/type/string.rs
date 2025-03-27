@@ -1,201 +1,115 @@
 use bytes::{Buf, BufMut, Bytes};
 
-use crate::protocol::{self, Readable, Writable};
+use crate::protocol::{self, Readable, ReadableResult, Writable};
 
 use super::{read_unsigned_varint, write_unsigned_varint};
 
 #[derive(Debug, Clone)]
-pub struct KafkaString(Bytes);
+pub struct KafkaString(Option<Bytes>);
 impl KafkaString {
-    pub fn value(&self) -> &Bytes {
-        &self.0
+    pub fn value(&self) -> Option<&[u8]> {
+        self.0.as_deref()
     }
 
-    pub fn as_str(&self) -> Result<&str, protocol::Error> {
-        std::str::from_utf8(self.0.as_ref()).map_err(|e| e.into())
+    pub(crate) fn write_none(buffer: &mut impl BufMut) {
+        (-1i16).write(buffer);
     }
 
-    pub(crate) fn write(buffer: &mut impl BufMut, value: &[u8]) {
-        let sz = value.len() as i16;
-        buffer.put_i16(sz);
-        buffer.put(value);
+    pub(crate) fn read_inner(buffer: &mut impl Buf) -> Option<Bytes> {
+        let sz = i16::read(buffer);
+        if sz < 0 {
+            return None;
+        }
+
+        let value = buffer.copy_to_bytes(sz as usize);
+        Some(value)
+    }
+
+    pub(crate) fn write_inner(buffer: &mut impl BufMut, data: Option<&[u8]>) {
+        if let Some(data) = data {
+            let sz = data.len() as i16;
+            sz.write(buffer);
+            buffer.put_slice(data);
+        } else {
+            Self::write_none(buffer);
+        }
     }
 }
-impl From<&Bytes> for KafkaString {
-    fn from(value: &Bytes) -> Self {
-        Self(value.clone())
+impl From<Option<Bytes>> for KafkaString {
+    fn from(value: Option<Bytes>) -> Self {
+        Self(value)
     }
 }
-impl From<&str> for KafkaString {
-    fn from(value: &str) -> Self {
-        Self(Bytes::copy_from_slice(value.as_bytes()))
+impl From<Option<&str>> for KafkaString {
+    fn from(value: Option<&str>) -> Self {
+        Self(value.map(|s| Bytes::copy_from_slice(s.as_bytes())))
     }
 }
 impl Readable for KafkaString {
-    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let sz = buffer.get_i16();
-        if sz < 0 {
-            Err(protocol::Error::IllegalArgument(
-                "Invalid String, negative size",
-            ))
-        } else {
-            let value = buffer.copy_to_bytes(sz as usize);
-            Ok(Self(value))
-        }
+    fn read(buffer: &mut impl Buf) -> Self {
+        Self::read_inner(buffer).into()
     }
 }
 impl Writable for KafkaString {
     fn write(&self, buffer: &mut impl BufMut) {
-        Self::write(buffer, self.0.as_ref());
+        Self::write_inner(buffer, self.value());
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct CompactKafkaString(Bytes);
+pub struct CompactKafkaString(Option<Bytes>);
 impl CompactKafkaString {
-    pub fn value(&self) -> &Bytes {
-        &self.0
-    }
-    pub fn as_str(&self) -> Result<&str, protocol::Error> {
-        std::str::from_utf8(self.0.as_ref()).map_err(|e| e.into())
+    pub fn value(&self) -> Option<&[u8]> {
+        self.0.as_deref()
     }
 
-    pub(crate) fn write(buffer: &mut impl BufMut, value: &[u8]) {
-        let sz = value.len() as u32 + 1;
-        write_unsigned_varint(sz, buffer);
-        buffer.put(value);
+    pub(crate) fn write_none(buffer: &mut impl BufMut) {
+        0u8.write(buffer);
     }
-}
-impl From<&Bytes> for CompactKafkaString {
-    fn from(value: &Bytes) -> Self {
-        Self(value.clone())
-    }
-}
-impl From<&str> for CompactKafkaString {
-    fn from(value: &str) -> Self {
-        Self(Bytes::copy_from_slice(value.as_bytes()))
-    }
-}
-impl Readable for CompactKafkaString {
-    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+
+    pub(crate) fn read_result_inner(
+        buffer: &mut impl Buf,
+    ) -> Result<Option<Bytes>, protocol::Error> {
         let sz = read_unsigned_varint(buffer)?;
         if sz == 0 {
-            Err(protocol::Error::IllegalArgument(
-                "Invalid CompactString, negative size",
-            ))
-        } else {
-            let sz = sz as usize - 1;
-            let value = buffer.copy_to_bytes(sz);
-            Ok(Self(value))
+            return Ok(None);
         }
+        if sz == 1 {
+            return Ok(Some(Bytes::new()));
+        }
+
+        let sz = sz as usize - 1;
+        let value = buffer.copy_to_bytes(sz);
+        Ok(Some(value))
+    }
+
+    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: Option<&[u8]>) {
+        if let Some(value) = value {
+            let sz = value.len() as u32 + 1;
+            write_unsigned_varint(buffer, sz);
+            buffer.put_slice(value);
+        } else {
+            Self::write_none(buffer);
+        }
+    }
+}
+impl From<Option<Bytes>> for CompactKafkaString {
+    fn from(value: Option<Bytes>) -> Self {
+        Self(value)
+    }
+}
+impl From<Option<&str>> for CompactKafkaString {
+    fn from(value: Option<&str>) -> Self {
+        Self(value.map(|s| Bytes::copy_from_slice(s.as_bytes())))
+    }
+}
+impl ReadableResult for CompactKafkaString {
+    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+        Self::read_result_inner(buffer).map(Self)
     }
 }
 impl Writable for CompactKafkaString {
     fn write(&self, buffer: &mut impl BufMut) {
-        Self::write(buffer, self.0.as_ref());
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NullableKafkaString(Option<Bytes>);
-impl NullableKafkaString {
-    pub fn value(&self) -> Option<&Bytes> {
-        self.0.as_ref()
-    }
-
-    pub fn as_str(&self) -> Option<Result<&str, protocol::Error>> {
-        self.0
-            .as_ref()
-            .map(|b| std::str::from_utf8(b.as_ref()).map_err(|e| e.into()))
-    }
-
-    #[inline(always)]
-    pub(crate) fn write_empty(buffer: &mut impl BufMut) {
-        buffer.put_i16(-1);
-    }
-}
-impl From<Option<&Bytes>> for NullableKafkaString {
-    fn from(value: Option<&Bytes>) -> Self {
-        Self(value.cloned())
-    }
-}
-impl From<Option<&str>> for NullableKafkaString {
-    fn from(value: Option<&str>) -> Self {
-        Self(value.map(|s| Bytes::copy_from_slice(s.as_bytes())))
-    }
-}
-impl Readable for NullableKafkaString {
-    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let sz = buffer.get_i16();
-        if sz < 0 {
-            return Ok(Self(None));
-        }
-        let sz = sz as usize;
-        let value = buffer.copy_to_bytes(sz);
-        Ok(Self(Some(value)))
-    }
-}
-impl Writable for NullableKafkaString {
-    fn write(&self, buffer: &mut impl BufMut) {
-        match &self.0 {
-            Some(data) => {
-                KafkaString::write(buffer, data.as_ref());
-            }
-            None => {
-                Self::write_empty(buffer);
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CompactNullableKafkaString(Option<Bytes>);
-impl CompactNullableKafkaString {
-    pub fn value(&self) -> Option<&Bytes> {
-        self.0.as_ref()
-    }
-
-    pub fn as_str(&self) -> Option<Result<&str, protocol::Error>> {
-        self.0
-            .as_ref()
-            .map(|b| std::str::from_utf8(b.as_ref()).map_err(|e| e.into()))
-    }
-
-    #[inline(always)]
-    pub(crate) fn write_empty(buffer: &mut impl BufMut) {
-        buffer.put_u8(0);
-    }
-}
-impl From<Option<&Bytes>> for CompactNullableKafkaString {
-    fn from(value: Option<&Bytes>) -> Self {
-        Self(value.cloned())
-    }
-}
-impl From<Option<&str>> for CompactNullableKafkaString {
-    fn from(value: Option<&str>) -> Self {
-        Self(value.map(|s| Bytes::copy_from_slice(s.as_bytes())))
-    }
-}
-impl Readable for CompactNullableKafkaString {
-    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let sz = read_unsigned_varint(buffer)?;
-        if sz == 0 {
-            return Ok(Self(None));
-        }
-        let sz = sz as usize - 1;
-        let value = buffer.copy_to_bytes(sz);
-        Ok(Self(Some(value)))
-    }
-}
-impl Writable for CompactNullableKafkaString {
-    fn write(&self, buffer: &mut impl BufMut) {
-        match &self.0 {
-            Some(data) => {
-                CompactKafkaString::write(buffer, data.as_ref());
-            }
-            None => {
-                Self::write_empty(buffer);
-            }
-        }
+        Self::write_inner(buffer, self.value());
     }
 }

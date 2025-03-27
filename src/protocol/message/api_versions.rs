@@ -1,126 +1,168 @@
 use std::collections::HashMap;
 
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::{
-    protocol::{
-        self,
-        r#type::{
-            Boolean, CompactArray, CompactKafkaString, Int16, Int32, Int64, TaggedField,
-            TaggedFields,
-        },
-        Readable, Writable,
-    },
-    FINALIZED_FEATURES, FINALIZED_FEATURES_EPOCH, SUPPORTED_APIS, SUPPORTED_FEATURES,
+use crate::protocol::{
+    self,
+    r#type::{Array, CompactArray, CompactKafkaString, TaggedField, TaggedFields},
+    Readable, ReadableVersion, Writable,
 };
 
-#[derive(Debug, Clone, Copy)]
-pub struct V0Request;
-impl Readable for V0Request {
-    fn read(_buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        Ok(V0Request)
-    }
-}
+pub(crate) const API_KEY: i16 = 18;
 
 #[derive(Debug, Clone)]
-pub struct V3Request {
-    client_software_name: CompactKafkaString,
-    client_software_version: CompactKafkaString,
+pub struct Request {
+    version: i16,
+    client_software_name: Option<Bytes>,
+    client_software_version: Option<Bytes>,
 }
-impl V3Request {
-    pub fn new(client_software_name: &str, client_software_version: &str) -> Self {
-        Self {
-            client_software_name: client_software_name.into(),
-            client_software_version: client_software_version.into(),
+impl Request {
+    fn new(
+        version: i16,
+        client_software_name: Option<&[u8]>,
+        client_software_version: Option<&[u8]>,
+    ) -> Self {
+        Request {
+            version,
+            client_software_name: client_software_name.map(Bytes::copy_from_slice),
+            client_software_version: client_software_version.map(Bytes::copy_from_slice),
         }
     }
 
-    pub fn client_software_name(&self) -> &CompactKafkaString {
-        &self.client_software_name
+    pub fn v0() -> Self {
+        Self::new(0, None, None)
     }
 
-    pub fn client_software_version(&self) -> &CompactKafkaString {
-        &self.client_software_version
+    pub fn v1() -> Self {
+        Self::new(1, None, None)
+    }
+
+    pub fn v2() -> Self {
+        Self::new(2, None, None)
+    }
+
+    pub fn v3(client_software_name: &str, client_software_version: &str) -> Self {
+        Self::new(
+            3,
+            Some(client_software_name.as_bytes()),
+            Some(client_software_version.as_bytes()),
+        )
+    }
+
+    pub fn v4(client_software_name: &str, client_software_version: &str) -> Self {
+        Self::new(
+            4,
+            Some(client_software_name.as_bytes()),
+            Some(client_software_version.as_bytes()),
+        )
+    }
+
+    pub fn client_software_name(&self) -> Option<&[u8]> {
+        self.client_software_name.as_deref()
+    }
+
+    pub fn client_software_version(&self) -> Option<&[u8]> {
+        self.client_software_version.as_deref()
     }
 }
-impl Readable for V3Request {
-    fn read(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
-        let client_software_name = CompactKafkaString::read(buffer)?;
-        let client_software_version = CompactKafkaString::read(buffer)?;
-        let _tagged_fields = TaggedFields::read(buffer)?;
+impl ReadableVersion for Request {
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        let (client_software_name, client_software_version) = if version < 3 {
+            (None, None)
+        } else {
+            let client_software_name = CompactKafkaString::read_result_inner(buffer)?.ok_or(
+                protocol::Error::IllegalArgument(
+                    "non-nullable field clientSoftwareName was serialized as null",
+                ),
+            )?;
+            let client_software_version = CompactKafkaString::read_result_inner(buffer)?.ok_or(
+                protocol::Error::IllegalArgument(
+                    "non-nullable field clientSoftwareVersion was serialized as null",
+                ),
+            )?;
+            (Some(client_software_name), Some(client_software_version))
+        };
+        if version >= 3 {
+            let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
+        }
 
         Ok(Self {
+            version,
             client_software_name,
             client_software_version,
         })
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct SupportedFeatureKey {
-    name: CompactKafkaString,
-    min_version: Int16,
-    max_version: Int16,
-}
-impl SupportedFeatureKey {
-    pub fn new(name: &str, min_version: i16, max_version: i16) -> Self {
-        Self {
-            name: name.into(),
-            min_version: min_version.into(),
-            max_version: max_version.into(),
-        }
-    }
-
-    pub fn name(&self) -> &CompactKafkaString {
-        &self.name
-    }
-
-    pub fn min_version(&self) -> Int16 {
-        self.min_version
-    }
-
-    pub fn max_version(&self) -> Int16 {
-        self.max_version
-    }
-}
-impl Writable for &SupportedFeatureKey {
+impl Writable for Request {
     fn write(&self, buffer: &mut impl BufMut) {
-        self.name.write(buffer);
-        self.min_version.write(buffer);
-        self.max_version.write(buffer);
+        if self.version >= 3 {
+            CompactKafkaString::write_inner(buffer, self.client_software_name());
+            CompactKafkaString::write_inner(buffer, self.client_software_version());
+            TaggedFields::write_empty(buffer);
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ApiKeyItem {
-    api_key: Int16,
-    min_version: Int16,
-    max_version: Int16,
+pub struct SupportedFeature {
+    version: i16,
+    name: Bytes,
+    min_version: i16,
+    max_version: i16,
 }
-impl ApiKeyItem {
-    pub fn new(api_key: i16, min_version: i16, max_version: i16) -> Self {
+impl SupportedFeature {
+    fn new(version: i16, name: &[u8], min_version: i16, max_version: i16) -> Self {
         Self {
-            api_key: api_key.into(),
-            min_version: min_version.into(),
-            max_version: max_version.into(),
+            version,
+            name: Bytes::copy_from_slice(name),
+            min_version,
+            max_version,
         }
     }
 
-    pub fn api_key(&self) -> Int16 {
-        self.api_key
+    pub fn v3(name: &str, min_version: i16, max_version: i16) -> Self {
+        Self::new(3, name.as_bytes(), min_version, max_version)
     }
 
-    pub fn min_version(&self) -> Int16 {
+    pub fn v4(name: &str, min_version: i16, max_version: i16) -> Self {
+        Self::new(4, name.as_bytes(), min_version, max_version)
+    }
+
+    pub fn name(&self) -> &[u8] {
+        self.name.as_ref()
+    }
+
+    pub fn min_version(&self) -> i16 {
         self.min_version
     }
 
-    pub fn max_version(&self) -> Int16 {
+    pub fn max_version(&self) -> i16 {
         self.max_version
     }
 }
-impl Writable for &ApiKeyItem {
+impl ReadableVersion for SupportedFeature {
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        if !(3..=4).contains(&version) {
+            return Err(protocol::Error::UnsupportedVersion);
+        }
+        let name = CompactKafkaString::read_result_inner(buffer)?.ok_or(
+            protocol::Error::IllegalArgument("non-nullable field name was serialized as null"),
+        )?;
+        let min_version = i16::read(buffer);
+        let max_version = i16::read(buffer);
+        let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
+
+        Ok(Self {
+            version,
+            name,
+            min_version,
+            max_version,
+        })
+    }
+}
+impl Writable for SupportedFeature {
     fn write(&self, buffer: &mut impl BufMut) {
-        self.api_key.write(buffer);
+        CompactKafkaString::write_inner(buffer, Some(self.name()));
         self.min_version.write(buffer);
         self.max_version.write(buffer);
         TaggedFields::write_empty(buffer);
@@ -128,423 +170,443 @@ impl Writable for &ApiKeyItem {
 }
 
 #[derive(Debug, Clone)]
-pub struct FinalizedFeatureKey {
-    name: CompactKafkaString,
-    max_version_level: Int16,
-    min_version_level: Int16,
+pub struct ApiKey {
+    version: i16,
+    api_key: i16,
+    min_version: i16,
+    max_version: i16,
 }
-impl FinalizedFeatureKey {
-    pub fn new(name: &str, max_version_level: i16, min_version_level: i16) -> Self {
+impl ApiKey {
+    pub fn v0(api_key: i16, min_version: i16, max_version: i16) -> Self {
         Self {
-            name: name.into(),
-            max_version_level: max_version_level.into(),
-            min_version_level: min_version_level.into(),
+            version: 0,
+            api_key,
+            min_version,
+            max_version,
         }
     }
 
-    pub fn name(&self) -> &CompactKafkaString {
-        &self.name
+    pub fn v1(api_key: i16, min_version: i16, max_version: i16) -> Self {
+        Self {
+            version: 1,
+            api_key,
+            min_version,
+            max_version,
+        }
     }
 
-    pub fn max_version_level(&self) -> Int16 {
+    pub fn v2(api_key: i16, min_version: i16, max_version: i16) -> Self {
+        Self {
+            version: 2,
+            api_key,
+            min_version,
+            max_version,
+        }
+    }
+
+    pub fn v3(api_key: i16, min_version: i16, max_version: i16) -> Self {
+        Self {
+            version: 3,
+            api_key,
+            min_version,
+            max_version,
+        }
+    }
+
+    pub fn v4(api_key: i16, min_version: i16, max_version: i16) -> Self {
+        Self {
+            version: 4,
+            api_key,
+            min_version,
+            max_version,
+        }
+    }
+
+    pub fn api_key(&self) -> i16 {
+        self.api_key
+    }
+
+    pub fn min_version(&self) -> i16 {
+        self.min_version
+    }
+
+    pub fn max_version(&self) -> i16 {
+        self.max_version
+    }
+}
+impl ReadableVersion for ApiKey {
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        if !(0..=4).contains(&version) {
+            return Err(protocol::Error::UnsupportedVersion);
+        }
+
+        let api_key = i16::read(buffer);
+        let min_version = i16::read(buffer);
+        let max_version = i16::read(buffer);
+        if version >= 3 {
+            let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
+        }
+        Ok(Self {
+            version,
+            api_key,
+            min_version,
+            max_version,
+        })
+    }
+}
+impl Writable for ApiKey {
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.api_key.write(buffer);
+        self.min_version.write(buffer);
+        self.max_version.write(buffer);
+        if self.version >= 3 {
+            TaggedFields::write_empty(buffer);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FinalizedFeature {
+    version: i16,
+    name: Bytes,
+    max_version_level: i16,
+    min_version_level: i16,
+}
+impl FinalizedFeature {
+    fn new(version: i16, name: &[u8], max_version_level: i16, min_version_level: i16) -> Self {
+        Self {
+            version,
+            name: Bytes::copy_from_slice(name),
+            max_version_level,
+            min_version_level,
+        }
+    }
+
+    pub fn v3(name: &str, max_version_level: i16, min_version_level: i16) -> Self {
+        Self::new(3, name.as_bytes(), max_version_level, min_version_level)
+    }
+
+    pub fn v4(name: &str, max_version_level: i16, min_version_level: i16) -> Self {
+        Self::new(4, name.as_bytes(), max_version_level, min_version_level)
+    }
+
+    pub fn name(&self) -> &[u8] {
+        self.name.as_ref()
+    }
+
+    pub fn max_version_level(&self) -> i16 {
         self.max_version_level
     }
 
-    pub fn min_version_level(&self) -> Int16 {
+    pub fn min_version_level(&self) -> i16 {
         self.min_version_level
     }
 }
-impl Writable for &FinalizedFeatureKey {
+impl ReadableVersion for FinalizedFeature {
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        if !(3..=4).contains(&version) {
+            return Err(protocol::Error::UnsupportedVersion);
+        }
+
+        let name = CompactKafkaString::read_result_inner(buffer)?.ok_or(
+            protocol::Error::IllegalArgument("non-nullable field name was serialized as null"),
+        )?;
+        let max_version_level = i16::read(buffer);
+        let min_version_level = i16::read(buffer);
+        let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
+
+        Ok(Self {
+            version,
+            name,
+            max_version_level,
+            min_version_level,
+        })
+    }
+}
+impl Writable for FinalizedFeature {
     fn write(&self, buffer: &mut impl BufMut) {
-        self.name.write(buffer);
+        CompactKafkaString::write_inner(buffer, Some(self.name()));
         self.max_version_level.write(buffer);
         self.min_version_level.write(buffer);
+        TaggedFields::write_empty(buffer);
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct V0Response<'a> {
-    correlation_id: Int32,
-    api_keys: Result<&'a HashMap<i16, ApiKeyItem>, Int16>,
+pub struct Response {
+    pub(crate) version: i16,
+    error_code: i16,
+    api_keys: Vec<ApiKey>,
+    throttle_time_ms: Option<i32>,
+    supported_features: Option<Vec<SupportedFeature>>,
+    finalized_features_epoch: Option<i64>,
+    finalized_features: Option<Vec<FinalizedFeature>>,
+    zk_migration_ready: Option<bool>,
 }
-impl<'a> V0Response<'a> {
-    pub fn error(correlation_id: i32, error_code: i16) -> Self {
-        Self {
-            correlation_id: correlation_id.into(),
-            api_keys: Err(error_code.into()),
-        }
-    }
-
-    pub fn success(correlation_id: i32, api_keys: &'a HashMap<i16, ApiKeyItem>) -> Self {
-        Self {
-            correlation_id: correlation_id.into(),
-            api_keys: Ok(api_keys),
-        }
-    }
-
-    pub fn correlation_id(&self) -> Int32 {
-        self.correlation_id
-    }
-
-    pub fn api_keys(&self) -> Result<&'a HashMap<i16, ApiKeyItem>, Int16> {
-        self.api_keys
-    }
-}
-impl Writable for V0Response<'_> {
-    fn write(&self, buffer: &mut impl BufMut) {
-        self.correlation_id.write(buffer);
-        match &self.api_keys {
-            Err(error_code) => {
-                error_code.write(buffer);
-                buffer.put_u8(0); // api_keys
-            }
-            Ok(api_keys) => {
-                Int16::write(buffer, 0); // error_code
-                if api_keys.is_empty() {
-                    buffer.put_u8(0);
-                } else {
-                    CompactArray::write(buffer, &api_keys.values().collect::<Vec<_>>());
-                }
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct V1ResponseData<'a> {
-    api_keys: &'a HashMap<i16, ApiKeyItem>,
-    throttle_time_ms: Int32,
-}
-impl<'a> V1ResponseData<'a> {
-    pub fn new(api_keys: &'a HashMap<i16, ApiKeyItem>, throttle_time_ms: i32) -> Self {
-        Self {
-            api_keys,
-            throttle_time_ms: throttle_time_ms.into(),
-        }
-    }
-
-    pub fn api_keys(&self) -> &HashMap<i16, ApiKeyItem> {
-        self.api_keys
-    }
-
-    pub fn throttle_time_ms(&self) -> Int32 {
-        self.throttle_time_ms
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct V1Response<'a> {
-    correlation_id: Int32,
-    data: Result<V1ResponseData<'a>, Int16>,
-}
-impl<'a> V1Response<'a> {
-    pub fn error(correlation_id: i32, error_code: i16) -> Self {
-        Self {
-            correlation_id: correlation_id.into(),
-            data: Err(error_code.into()),
-        }
-    }
-
-    pub fn success(
-        correlation_id: i32,
-        api_keys: &'a HashMap<i16, ApiKeyItem>,
-        throttle_time_ms: i32,
-    ) -> Self {
-        Self {
-            correlation_id: correlation_id.into(),
-            data: Ok(V1ResponseData {
-                api_keys,
-                throttle_time_ms: throttle_time_ms.into(),
-            }),
-        }
-    }
-
-    pub fn correlation_id(&self) -> Int32 {
-        self.correlation_id
-    }
-
-    pub fn data(&self) -> &Result<V1ResponseData<'a>, Int16> {
-        &self.data
-    }
-}
-impl Writable for V1Response<'_> {
-    fn write(&self, buffer: &mut impl BufMut) {
-        self.correlation_id.write(buffer);
-        match &self.data {
-            Err(error_code) => {
-                error_code.write(buffer);
-                buffer.put_u8(0); // api_keys
-                buffer.put_i32(0); // throttle_time_ms
-            }
-            Ok(V1ResponseData {
-                api_keys,
-                throttle_time_ms,
-            }) => {
-                buffer.put_i16(0); // error_code
-                if api_keys.is_empty() {
-                    CompactArray::<ApiKeyItem>::write_empty(buffer);
-                } else {
-                    CompactArray::write(buffer, &api_keys.values().collect::<Vec<_>>())
-                }
-                throttle_time_ms.write(buffer);
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct V3ResponseData<'a> {
-    api_keys: &'a HashMap<i16, ApiKeyItem>,
-    throttle_time_ms: Int32,
-
-    supported_features: &'a HashMap<String, SupportedFeatureKey>,
-    finalized_features_epoch: Option<Int64>,
-    finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
-    zk_migration_ready: Boolean,
-}
-impl<'a> V3ResponseData<'a> {
-    pub fn new(
-        api_keys: &'a HashMap<i16, ApiKeyItem>,
-        throttle_time_ms: i32,
-        supported_features: &'a HashMap<String, SupportedFeatureKey>,
+impl Response {
+    fn new(
+        version: i16,
+        error_code: i16,
+        api_keys: Vec<ApiKey>,
+        throttle_time_ms: Option<i32>,
+        supported_features: Option<Vec<SupportedFeature>>,
         finalized_features_epoch: Option<i64>,
-        finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
-        zk_migration_ready: bool,
+        finalized_features: Option<Vec<FinalizedFeature>>,
+        zk_migration_ready: Option<bool>,
     ) -> Self {
         Self {
+            version,
+            error_code,
             api_keys,
-            throttle_time_ms: throttle_time_ms.into(),
+            throttle_time_ms,
             supported_features,
-            finalized_features_epoch: finalized_features_epoch.map(Int64::from),
+            finalized_features_epoch,
             finalized_features,
-            zk_migration_ready: zk_migration_ready.into(),
+            zk_migration_ready,
         }
     }
 
-    pub fn api_keys(&self) -> &HashMap<i16, ApiKeyItem> {
-        self.api_keys
+    pub fn v0(error_code: i16, api_keys: &HashMap<i16, ApiKey>) -> Self {
+        Self::new(
+            0,
+            error_code,
+            api_keys.values().cloned().collect(),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
     }
 
-    pub fn throttle_time_ms(&self) -> Int32 {
-        self.throttle_time_ms
+    pub fn v1(error_code: i16, api_keys: &HashMap<i16, ApiKey>, throttle_time_ms: i32) -> Self {
+        Self::new(
+            1,
+            error_code,
+            api_keys.values().cloned().collect(),
+            Some(throttle_time_ms),
+            None,
+            None,
+            None,
+            None,
+        )
     }
 
-    pub fn supported_features(&self) -> &HashMap<String, SupportedFeatureKey> {
-        self.supported_features
+    pub fn v2(error_code: i16, api_keys: &HashMap<i16, ApiKey>, throttle_time_ms: i32) -> Self {
+        Self::new(
+            2,
+            error_code,
+            api_keys.values().cloned().collect(),
+            Some(throttle_time_ms),
+            None,
+            None,
+            None,
+            None,
+        )
     }
 
-    pub fn finalized_features_epoch(&self) -> Option<Int64> {
+    pub fn v3(
+        error_code: i16,
+        api_keys: &HashMap<i16, ApiKey>,
+        throttle_time_ms: i32,
+        supported_features: Option<&HashMap<String, SupportedFeature>>,
+        finalized_features_epoch: Option<i64>,
+        finalized_features: Option<&HashMap<String, FinalizedFeature>>,
+        zk_migration_ready: Option<bool>,
+    ) -> Self {
+        Self::new(
+            3,
+            error_code,
+            api_keys.values().cloned().collect(),
+            Some(throttle_time_ms),
+            supported_features.map(|h| h.values().cloned().collect()),
+            finalized_features_epoch,
+            finalized_features.map(|h| h.values().cloned().collect()),
+            zk_migration_ready,
+        )
+    }
+
+    pub fn v4(
+        error_code: i16,
+        api_keys: &HashMap<i16, ApiKey>,
+        throttle_time_ms: i32,
+        supported_features: Option<&HashMap<String, SupportedFeature>>,
+        finalized_features_epoch: Option<i64>,
+        finalized_features: Option<&HashMap<String, FinalizedFeature>>,
+        zk_migration_ready: Option<bool>,
+    ) -> Self {
+        Self::new(
+            4,
+            error_code,
+            api_keys.values().cloned().collect(),
+            Some(throttle_time_ms),
+            supported_features.map(|h| h.values().cloned().collect()),
+            finalized_features_epoch,
+            finalized_features.map(|h| h.values().cloned().collect()),
+            zk_migration_ready,
+        )
+    }
+
+    pub fn error_code(&self) -> i16 {
+        self.error_code
+    }
+
+    pub fn api_keys(&self) -> &[ApiKey] {
+        &self.api_keys
+    }
+
+    pub fn throttle_time_ms(&self) -> i32 {
+        self.throttle_time_ms.unwrap_or_default()
+    }
+
+    pub fn supported_features(&self) -> Option<&[SupportedFeature]> {
+        self.supported_features.as_deref()
+    }
+
+    pub fn finalized_features_epoch(&self) -> Option<i64> {
         self.finalized_features_epoch
     }
 
-    pub fn finalized_features(&self) -> &HashMap<String, FinalizedFeatureKey> {
-        self.finalized_features
+    pub fn finalized_features(&self) -> Option<&[FinalizedFeature]> {
+        self.finalized_features.as_deref()
     }
 
-    pub fn zk_migration_ready(&self) -> Boolean {
+    pub fn zk_migration_ready(&self) -> Option<bool> {
         self.zk_migration_ready
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct V3Response<'a> {
-    correlation_id: Int32,
-    data: Result<V3ResponseData<'a>, Int16>,
-}
-impl<'a> V3Response<'a> {
-    pub fn error(correlation_id: i32, error_code: i16) -> Self {
-        Self {
-            correlation_id: correlation_id.into(),
-            data: Err(error_code.into()),
+impl ReadableVersion for Response {
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        if !(0..=4).contains(&version) {
+            return Err(protocol::Error::UnsupportedVersion);
         }
-    }
 
-    pub fn success(
-        correlation_id: i32,
-        api_keys: &'a HashMap<i16, ApiKeyItem>,
-        throttle_time_ms: i32,
-        supported_features: &'a HashMap<String, SupportedFeatureKey>,
-        finalized_features_epoch: Option<i64>,
-        finalized_features: &'a HashMap<String, FinalizedFeatureKey>,
-        zk_migration_ready: bool,
-    ) -> Self {
-        Self {
-            correlation_id: correlation_id.into(),
-            data: Ok(V3ResponseData {
-                api_keys,
-                throttle_time_ms: throttle_time_ms.into(),
-                supported_features,
-                finalized_features_epoch: finalized_features_epoch.map(|v| v.into()),
-                finalized_features,
-                zk_migration_ready: zk_migration_ready.into(),
-            }),
-        }
-    }
+        let error_code = i16::read(buffer);
+        let api_keys = if version >= 3 {
+            CompactArray::<ApiKey>::read_version_inner(buffer, version)
+        } else {
+            Array::<ApiKey>::read_version_inner(buffer, version)
+        }?
+        .ok_or(protocol::Error::IllegalArgument(
+            "non-nullable field apiKeys was serialized as null",
+        ))?;
+        let throttle_time_ms = if version >= 1 {
+            Some(i32::read(buffer))
+        } else {
+            None
+        };
 
-    pub fn correlation_id(&self) -> Int32 {
-        self.correlation_id
-    }
+        let mut supported_features = None;
+        let mut finalized_features_epoch = None;
+        let mut finalized_features = None;
+        let mut zk_migration_ready = None;
+        if version >= 3 {
+            let tagged_fields = TaggedFields::read_result_inner(buffer)?;
 
-    pub fn data(&self) -> &Result<V3ResponseData, Int16> {
-        &self.data
-    }
-}
-impl Writable for V3Response<'_> {
-    fn write(&self, buffer: &mut impl BufMut) {
-        self.correlation_id.write(buffer);
-        match &self.data {
-            Err(error_code) => {
-                error_code.write(buffer);
-                CompactArray::<ApiKeyItem>::write_empty(buffer); // api_keys
-                Int32::write(buffer, 0); // throttle_time_ms
-                TaggedFields::write_empty(buffer); // empty _tagged_fields
-            }
-            Ok(V3ResponseData {
-                api_keys,
-                throttle_time_ms,
-                supported_features,
-                finalized_features_epoch,
-                finalized_features,
-                zk_migration_ready,
-            }) => {
-                buffer.put_i16(0); // error_code
-                if api_keys.is_empty() {
-                    CompactArray::<ApiKeyItem>::write_empty(buffer);
-                } else {
-                    CompactArray::write(buffer, &api_keys.values().collect::<Vec<_>>());
-                }
-                throttle_time_ms.write(buffer);
-
-                let mut tagged_fields = Vec::<TaggedField>::new();
-                if !supported_features.is_empty() {
-                    let mut buffer = BytesMut::with_capacity(24 * supported_features.len());
-                    CompactArray::write(
-                        &mut buffer,
-                        &supported_features.values().collect::<Vec<_>>(),
-                    );
-                    let data = buffer.freeze();
-                    let tagged_field = TaggedField::new(0, data);
-                    tagged_fields.push(tagged_field);
-                }
-                if let Some(finalized_feature_epoch) = finalized_features_epoch {
-                    let mut buffer = BytesMut::with_capacity(8);
-                    finalized_feature_epoch.write(&mut buffer);
-                    let data = buffer.freeze();
-                    let tagged_field = TaggedField::new(1, data);
-                    tagged_fields.push(tagged_field);
-
-                    if finalized_feature_epoch.value() > 0 && !finalized_features.is_empty() {
-                        let mut buffer = BytesMut::with_capacity(24 * finalized_features.len());
-                        CompactArray::write(
-                            &mut buffer,
-                            &finalized_features.values().collect::<Vec<_>>(),
-                        );
-                        let data = buffer.freeze();
-                        let tagged_field = TaggedField::new(2, data);
-                        tagged_fields.push(tagged_field);
+            for tf in tagged_fields {
+                let mut inner_buffer = tf.data;
+                match tf.key {
+                    0 => {
+                        let value = CompactArray::<SupportedFeature>::read_version_inner(
+                            &mut inner_buffer,
+                            version,
+                        )?
+                        .ok_or(protocol::Error::IllegalArgument(
+                            "non-nullable field supportedFeatures was serialized as null",
+                        ))?;
+                        supported_features.replace(value);
                     }
-
-                    if zk_migration_ready.value() {
-                        let mut buffer = BytesMut::with_capacity(1);
-                        zk_migration_ready.write(&mut buffer);
-                        let data = buffer.freeze();
-                        let tagged_field = TaggedField::new(3, data);
-                        tagged_fields.push(tagged_field);
+                    1 => {
+                        finalized_features_epoch.replace(i64::read(buffer));
                     }
-                }
-
-                if tagged_fields.is_empty() {
-                    TaggedFields::write_empty(buffer);
-                } else {
-                    TaggedFields::write(buffer, &tagged_fields);
+                    2 => {
+                        let value = CompactArray::<FinalizedFeature>::read_version_inner(
+                            &mut inner_buffer,
+                            version,
+                        )?
+                        .ok_or(protocol::Error::IllegalArgument(
+                            "non-nullable field finalizedFeatures was serialized as null",
+                        ))?;
+                        finalized_features.replace(value);
+                    }
+                    3 => {
+                        zk_migration_ready.replace(bool::read(buffer));
+                    }
+                    _ => continue,
                 }
             }
-        }
+        };
+
+        Ok(Self {
+            version,
+            error_code,
+            api_keys,
+            throttle_time_ms,
+            supported_features,
+            finalized_features_epoch,
+            finalized_features,
+            zk_migration_ready,
+        })
     }
 }
-
-#[derive(Debug, Clone)]
-pub enum Request {
-    V0(V0Request),
-    V1(V0Request),
-    V2(V0Request),
-    V3(V3Request),
-    V4(V3Request),
-}
-
-#[derive(Debug, Clone)]
-pub enum Response<'a> {
-    V0(V0Response<'a>),
-    V1(V1Response<'a>),
-    V2(V1Response<'a>),
-    V3(V3Response<'a>),
-    V4(V3Response<'a>),
-}
-impl Writable for Response<'_> {
+impl Writable for Response {
     fn write(&self, buffer: &mut impl BufMut) {
-        match self {
-            Response::V0(resp) => resp.write(buffer),
-            Response::V1(resp) => resp.write(buffer),
-            Response::V2(resp) => resp.write(buffer),
-            Response::V3(resp) => resp.write(buffer),
-            Response::V4(resp) => resp.write(buffer),
+        self.error_code.write(buffer);
+        if self.version >= 3 {
+            CompactArray::write_inner(buffer, Some(self.api_keys()));
+        } else {
+            Array::write_inner(buffer, Some(self.api_keys()));
+        }
+        if self.version >= 1 {
+            self.throttle_time_ms().write(buffer);
+        }
+        if self.version >= 3 {
+            let tagged_fields = {
+                let mut value = Vec::new();
+                if self.supported_features().is_some() {
+                    let mut inner_buffer = BytesMut::with_capacity(16);
+                    CompactArray::write_inner(&mut inner_buffer, self.supported_features());
+                    value.push(TaggedField::new(0, inner_buffer.freeze()));
+                }
+                if let Some(finalized_features_epoch) = self.finalized_features_epoch() {
+                    let mut inner_buffer = BytesMut::with_capacity(8);
+                    finalized_features_epoch.write(&mut inner_buffer);
+                    value.push(TaggedField::new(1, inner_buffer.freeze()));
+                }
+                if self.finalized_features().is_some() {
+                    let mut inner_buffer = BytesMut::with_capacity(16);
+                    CompactArray::write_inner(&mut inner_buffer, self.finalized_features());
+                    value.push(TaggedField::new(2, inner_buffer.freeze()));
+                }
+                if let Some(zk_migration_ready) = self.zk_migration_ready() {
+                    let mut inner_buffer = BytesMut::with_capacity(1);
+                    zk_migration_ready.write(&mut inner_buffer);
+                    value.push(TaggedField::new(3, inner_buffer.freeze()));
+                }
+
+                value
+            };
+            TaggedFields::write_inner(buffer, &tagged_fields);
         }
     }
 }
 
-pub fn process_request(buffer: &mut impl Buf, correlation_id: i32, version: i16) -> Response {
-    match version {
-        0 => {
-            if V0Request::read(buffer).is_err() {
-                Response::V0(V0Response::error(correlation_id, 2))
-            } else {
-                Response::V0(V0Response::success(correlation_id, &SUPPORTED_APIS))
-            }
-        }
-        1 => {
-            if V0Request::read(buffer).is_err() {
-                Response::V1(V1Response::error(correlation_id, 2))
-            } else {
-                Response::V1(V1Response::success(correlation_id, &SUPPORTED_APIS, 0))
-            }
-        }
-        2 => {
-            if V0Request::read(buffer).is_err() {
-                Response::V2(V1Response::error(correlation_id, 2))
-            } else {
-                Response::V2(V1Response::success(correlation_id, &SUPPORTED_APIS, 0))
-            }
-        }
-        3 => {
-            if V3Request::read(buffer).is_err() {
-                Response::V3(V3Response::error(correlation_id, 2))
-            } else {
-                Response::V3(V3Response::success(
-                    correlation_id,
-                    &SUPPORTED_APIS,
-                    0,
-                    &SUPPORTED_FEATURES,
-                    *FINALIZED_FEATURES_EPOCH,
-                    &FINALIZED_FEATURES,
-                    false,
-                ))
-            }
-        }
-        4 => {
-            if V3Request::read(buffer).is_err() {
-                Response::V4(V3Response::error(correlation_id, 2))
-            } else {
-                Response::V4(V3Response::success(
-                    correlation_id,
-                    &SUPPORTED_APIS,
-                    0,
-                    &SUPPORTED_FEATURES,
-                    *FINALIZED_FEATURES_EPOCH,
-                    &FINALIZED_FEATURES,
-                    false,
-                ))
-            }
-        }
-        _ => Response::V0(V0Response::error(correlation_id, 35)),
+pub(crate) fn process_request(
+    request: Request,
+    api_keys: &HashMap<i16, ApiKey>,
+    _supported_features: &HashMap<String, SupportedFeature>,
+    _finalized_features: &HashMap<String, FinalizedFeature>,
+) -> Response {
+    if request.version < 0 || request.version > 4 {
+        return Response::v0(35, api_keys);
+    }
+
+    match request.version {
+        0 => Response::v0(0, api_keys),
+        1 => Response::v1(0, api_keys, 0),
+        2 => Response::v2(0, api_keys, 0),
+        3 => Response::v3(0, api_keys, 0, None, None, None, None),
+        4 => Response::v4(0, api_keys, 0, None, None, None, None),
+        _ => unreachable!(),
     }
 }

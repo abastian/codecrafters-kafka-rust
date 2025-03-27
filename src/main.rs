@@ -1,19 +1,26 @@
 #![allow(unused_imports)]
 use std::{
     collections::HashMap,
+    fs::File,
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
+    sync::Arc,
     thread,
 };
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use codecrafters_kafka::protocol::{
-    self,
-    r#type::{NullableKafkaString, TaggedFields},
-    Readable, Writable,
+use codecrafters_kafka::{
+    metadata,
+    model::{self, Topic},
+    protocol::{
+        self,
+        message::{process_request, read_request, write_response},
+        r#type::TaggedFields,
+        Readable, Writable,
+    },
 };
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     println!("Logs from your program will appear here!");
 
@@ -23,9 +30,11 @@ fn main() {
         match stream {
             Ok(stream) => {
                 println!("accepted new connection");
-                thread::spawn(|| {
-                    if let Err(err) = handle(stream) {
-                        println!("error while handle stream: {}", err);
+                thread::spawn({
+                    move || {
+                        if let Err(err) = handle(stream) {
+                            println!("error while handle stream: {}", err);
+                        }
                     }
                 });
             }
@@ -34,6 +43,8 @@ fn main() {
             }
         }
     }
+
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -56,16 +67,8 @@ fn handle(mut stream: TcpStream) -> Result<(), KafkaError> {
         stream_buffer.put_slice(&(&filler)[..read_bytes]);
 
         let mut read_buffer: &[u8] = stream_buffer.as_mut();
-        // request consist of three parts,
-        // message_sz part
-        if read_buffer.remaining() < 4 {
-            continue;
-        }
-        let message_sz = read_buffer.get_i32() as usize;
-        if read_buffer.remaining() < message_sz {
-            continue;
-        }
-        let mut buffer = read_buffer.copy_to_bytes(message_sz);
+
+        let (request_header, request) = read_request(&mut read_buffer)?;
         if read_buffer.is_empty() {
             stream_buffer.clear();
         } else {
@@ -75,50 +78,19 @@ fn handle(mut stream: TcpStream) -> Result<(), KafkaError> {
             stream_buffer.truncate(read_buffer_remaining);
         }
 
-        // header part
-        // - request_api_key
-        let request_api_key = buffer.get_i16();
-        // - request_api_version
-        let request_api_version = buffer.get_i16();
-        // - correlation_id
-        let correlation_id = buffer.get_i32();
-        // - client_id
-        let _client_id = NullableKafkaString::read(&mut buffer);
-        // - tagged_fields
-        let _tagged_fields = TaggedFields::read(&mut buffer);
+        let response = process_request(request)?;
 
-        let response_data = match request_api_key {
-            18 => {
-                let api_versions = protocol::message::process_api_versions_request(
-                    &mut buffer,
-                    correlation_id,
-                    request_api_version,
-                );
-
-                let mut buffer = BytesMut::with_capacity(16);
-                api_versions.write(&mut buffer);
-                buffer.freeze()
-            }
-            75 => {
-                let describe_topic_partitions =
-                    protocol::message::process_describe_topic_partitions_request(
-                        &mut buffer,
-                        correlation_id,
-                        request_api_version,
-                    );
-
-                let mut buffer = BytesMut::with_capacity(16);
-                describe_topic_partitions.write(&mut buffer);
-                buffer.freeze()
-            }
-            _ => Bytes::new(),
+        let response_data = {
+            let mut data = BytesMut::with_capacity(64);
+            write_response(&mut data, request_header, response)?;
+            data.freeze()
         };
 
         let message_size = response_data.len() as i32;
 
         let header_data = {
             let mut data = BytesMut::with_capacity(4);
-            data.put_i32(message_size);
+            message_size.write(&mut data);
             data.freeze()
         };
 
