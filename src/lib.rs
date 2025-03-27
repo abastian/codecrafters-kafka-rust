@@ -12,6 +12,7 @@ pub mod protocol;
 
 pub(crate) static SUPPORTED_APIS: LazyLock<HashMap<i16, ApiKey>> = LazyLock::new(|| {
     let mut res = HashMap::new();
+    res.insert(1, ApiKey::v4(1, 0, 16));
     res.insert(18, ApiKey::v4(18, 0, 4));
     res.insert(75, ApiKey::v4(75, 0, 0));
 
