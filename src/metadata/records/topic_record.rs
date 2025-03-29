@@ -7,7 +7,7 @@ use crate::protocol::{
     Readable, ReadableVersion, Writable,
 };
 
-pub(crate) static API_KEY: i16 = 2;
+pub(crate) const API_KEY: i16 = 2;
 
 #[derive(Debug, Clone)]
 pub struct TopicRecord {

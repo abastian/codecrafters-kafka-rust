@@ -55,9 +55,8 @@ pub(crate) static METADATA_CACHE: LazyLock<Result<HashMap<uuid::Uuid, Topic>, pr
                                 let r#type = value.r#type();
                                 let version = value.version() as i16;
                                 let mut data = value.data().clone();
-                                match r#type {
-                                    2 => {
-                                        // TopicRecord
+                                match r#type as i16 {
+                                    metadata::records::topic_record::API_KEY => {
                                         let topic_record =
                                             metadata::records::TopicRecord::read_version(
                                                 &mut data, version,
@@ -68,8 +67,7 @@ pub(crate) static METADATA_CACHE: LazyLock<Result<HashMap<uuid::Uuid, Topic>, pr
                                         let topic = model::Topic::new(topic_id, topic_name);
                                         topics.insert(topic_id, topic);
                                     }
-                                    3 => {
-                                        // PartitionRecord
+                                    metadata::records::partition_record::API_KEY => {
                                         let partition_record =
                                             metadata::records::PartitionRecord::read_version(
                                                 &mut data, version,

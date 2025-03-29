@@ -7,7 +7,7 @@ use crate::protocol::{
     Readable, ReadableVersion, Writable,
 };
 
-pub(crate) static API_KEY: i16 = 3;
+pub(crate) const API_KEY: i16 = 3;
 
 #[derive(Debug, Clone)]
 pub struct PartitionRecord {
