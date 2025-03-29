@@ -306,7 +306,7 @@ pub struct FetchableTopicResponse {
     partitions: Vec<PartitionData>,
 }
 impl FetchableTopicResponse {
-    fn new(version: i16, topic: TopicID, partitions: Vec<PartitionData>) -> Self {
+    pub(super) fn new(version: i16, topic: TopicID, partitions: Vec<PartitionData>) -> Self {
         Self {
             version,
             topic,
@@ -502,7 +502,7 @@ pub struct PartitionData {
     snapshot_id: Option<SnapshotId>,
 }
 impl PartitionData {
-    fn new(
+    pub(super) fn new(
         version: i16,
         partition_index: i32,
         error_code: i16,

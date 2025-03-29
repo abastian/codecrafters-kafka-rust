@@ -681,8 +681,8 @@ impl Writable for ReplicaState {
 #[derive(Debug, Clone)]
 pub struct FetchTopic {
     version: i16,
-    topic: TopicID,
-    partitions: Vec<FetchPartition>,
+    pub(super) topic: TopicID,
+    pub(super) partitions: Vec<FetchPartition>,
 }
 impl FetchTopic {
     pub fn v4(topic: &str, partitions: Vec<FetchPartition>) -> Self {
