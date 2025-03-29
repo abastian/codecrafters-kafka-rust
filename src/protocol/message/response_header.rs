@@ -20,10 +20,6 @@ impl ResponseHeader {
             correlation_id,
         }
     }
-
-    pub fn correlation_id(&self) -> i32 {
-        self.correlation_id
-    }
 }
 impl ReadableVersion for ResponseHeader {
     fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {

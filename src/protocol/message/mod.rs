@@ -1,9 +1,12 @@
 pub(crate) mod api_versions;
 pub(crate) mod describe_topic_partitions;
+pub(crate) mod fetch;
 pub(crate) mod request_header;
 pub(crate) mod response_header;
 
 use std::{collections::HashMap, sync::LazyLock};
+
+use bytes::{Buf, BufMut};
 
 use crate::{
     protocol::{ReadableResult, Writable},
@@ -14,17 +17,32 @@ use super::{Readable, ReadableVersion};
 
 use api_versions::process_request as process_api_versions_request;
 use describe_topic_partitions::process_request as process_describe_topic_partitions_request;
+use fetch::process_request as process_fetch_request;
 
 pub use api_versions::{Request as ApiVersionsRequest, Response as ApiVersionsResponse};
-use bytes::{Buf, BufMut};
 pub use describe_topic_partitions::{
     Request as DescribeTopicPartitionsRequest, Response as DescribeTopicPartitionsResponse,
 };
-use request_header::RequestHeader;
-use response_header::ResponseHeader;
+pub use fetch::{request::Request as FetchRequest, response::Response as FetchResponse};
+pub use request_header::RequestHeader;
+pub use response_header::ResponseHeader;
 
 static REQUEST_HEADER_VERSIONS: LazyLock<HashMap<(i16, i16), u8>> = LazyLock::new(|| {
     HashMap::from([
+        ((fetch::API_KEY, 4), 1),
+        ((fetch::API_KEY, 5), 1),
+        ((fetch::API_KEY, 6), 1),
+        ((fetch::API_KEY, 7), 1),
+        ((fetch::API_KEY, 8), 1),
+        ((fetch::API_KEY, 9), 1),
+        ((fetch::API_KEY, 10), 1),
+        ((fetch::API_KEY, 11), 1),
+        ((fetch::API_KEY, 12), 2),
+        ((fetch::API_KEY, 13), 2),
+        ((fetch::API_KEY, 14), 2),
+        ((fetch::API_KEY, 15), 2),
+        ((fetch::API_KEY, 16), 2),
+        ((fetch::API_KEY, 17), 2),
         ((api_versions::API_KEY, 0), 1),
         ((api_versions::API_KEY, 1), 1),
         ((api_versions::API_KEY, 2), 1),
@@ -36,6 +54,20 @@ static REQUEST_HEADER_VERSIONS: LazyLock<HashMap<(i16, i16), u8>> = LazyLock::ne
 
 static RESPONSE_HEADER_VERSIONS: LazyLock<HashMap<(i16, i16), u8>> = LazyLock::new(|| {
     HashMap::from([
+        ((fetch::API_KEY, 4), 0),
+        ((fetch::API_KEY, 5), 0),
+        ((fetch::API_KEY, 6), 0),
+        ((fetch::API_KEY, 7), 0),
+        ((fetch::API_KEY, 8), 0),
+        ((fetch::API_KEY, 9), 0),
+        ((fetch::API_KEY, 10), 0),
+        ((fetch::API_KEY, 11), 0),
+        ((fetch::API_KEY, 12), 1),
+        ((fetch::API_KEY, 13), 1),
+        ((fetch::API_KEY, 14), 1),
+        ((fetch::API_KEY, 15), 1),
+        ((fetch::API_KEY, 16), 1),
+        ((fetch::API_KEY, 17), 1),
         ((api_versions::API_KEY, 0), 0),
         ((api_versions::API_KEY, 1), 0),
         ((api_versions::API_KEY, 2), 0),
@@ -46,11 +78,13 @@ static RESPONSE_HEADER_VERSIONS: LazyLock<HashMap<(i16, i16), u8>> = LazyLock::n
 });
 
 pub enum KafkaRequest {
+    Fetch(FetchRequest),
     ApiVersions(ApiVersionsRequest),
     DescribeTopicPartitions(DescribeTopicPartitionsRequest),
 }
 
 pub enum KafkaResponse {
+    Fetch(FetchResponse),
     ApiVersions(ApiVersionsResponse),
     DescribeTopicPartitions(DescribeTopicPartitionsResponse),
 }
@@ -69,6 +103,11 @@ pub fn read_request(buffer: &mut impl Buf) -> Result<(RequestHeader, KafkaReques
     let header = RequestHeader::read_result(&mut inner_buffer)?;
 
     match header.request_api_key() {
+        fetch::API_KEY => {
+            let request =
+                FetchRequest::read_version(&mut inner_buffer, header.request_api_version())?;
+            Ok((header, KafkaRequest::Fetch(request)))
+        }
         api_versions::API_KEY => {
             let request =
                 ApiVersionsRequest::read_version(&mut inner_buffer, header.request_api_version())?;
@@ -87,6 +126,10 @@ pub fn read_request(buffer: &mut impl Buf) -> Result<(RequestHeader, KafkaReques
 
 pub fn process_request(request: KafkaRequest) -> Result<KafkaResponse, super::Error> {
     match request {
+        KafkaRequest::Fetch(request) => {
+            let response = process_fetch_request(request);
+            Ok(KafkaResponse::Fetch(response))
+        }
         KafkaRequest::ApiVersions(request) => {
             let response = process_api_versions_request(
                 request,
@@ -132,6 +175,7 @@ pub fn write_response(
     response_header.write(buffer);
 
     match response {
+        KafkaResponse::Fetch(resp) => resp.write(buffer),
         KafkaResponse::ApiVersions(resp) => resp.write(buffer),
         KafkaResponse::DescribeTopicPartitions(resp) => resp.write(buffer),
     };
