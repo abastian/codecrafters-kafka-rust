@@ -494,7 +494,12 @@ pub struct PartitionData {
     high_watermark: i64,
     last_stable_offset: i64,
     log_start_offset: i64,
+    aborted_transactions: Option<Vec<AbortedTransaction>>,
+    preferred_read_replica: i32,
+    records: Option<Bytes>,
     diverging_epoch: Option<EpochEndOffset>,
+    current_leader: Option<LeaderIdAndEpoch>,
+    snapshot_id: Option<SnapshotId>,
 }
 impl PartitionData {
     fn new(
@@ -504,7 +509,12 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        preferred_read_replica: i32,
+        records: Option<Bytes>,
         diverging_epoch: Option<EpochEndOffset>,
+        current_leader: Option<LeaderIdAndEpoch>,
+        snapshot_id: Option<SnapshotId>,
     ) -> Self {
         Self {
             version,
@@ -513,7 +523,12 @@ impl PartitionData {
             high_watermark,
             last_stable_offset: last_stable_offset.unwrap_or(-1),
             log_start_offset: log_start_offset.unwrap_or(-1),
+            aborted_transactions,
+            preferred_read_replica,
+            records,
             diverging_epoch,
+            current_leader,
+            snapshot_id,
         }
     }
 
@@ -522,6 +537,8 @@ impl PartitionData {
         error_code: i16,
         high_watermark: i64,
         last_stable_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        records: Option<Bytes>,
     ) -> Self {
         Self::new(
             4,
@@ -529,6 +546,11 @@ impl PartitionData {
             error_code,
             high_watermark,
             last_stable_offset,
+            None,
+            aborted_transactions,
+            -1,
+            records,
+            None,
             None,
             None,
         )
@@ -540,6 +562,8 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        records: Option<Bytes>,
     ) -> Self {
         Self::new(
             5,
@@ -548,6 +572,11 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            -1,
+            records,
+            None,
+            None,
             None,
         )
     }
@@ -558,6 +587,8 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        records: Option<Bytes>,
     ) -> Self {
         Self::new(
             6,
@@ -566,6 +597,11 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            -1,
+            records,
+            None,
+            None,
             None,
         )
     }
@@ -576,6 +612,8 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        records: Option<Bytes>,
     ) -> Self {
         Self::new(
             7,
@@ -584,6 +622,11 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            -1,
+            records,
+            None,
+            None,
             None,
         )
     }
@@ -594,6 +637,8 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        records: Option<Bytes>,
     ) -> Self {
         Self::new(
             8,
@@ -602,6 +647,11 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            -1,
+            records,
+            None,
+            None,
             None,
         )
     }
@@ -612,6 +662,8 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        records: Option<Bytes>,
     ) -> Self {
         Self::new(
             9,
@@ -620,6 +672,11 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            -1,
+            records,
+            None,
+            None,
             None,
         )
     }
@@ -630,6 +687,8 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        records: Option<Bytes>,
     ) -> Self {
         Self::new(
             10,
@@ -638,6 +697,11 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            -1,
+            records,
+            None,
+            None,
             None,
         )
     }
@@ -648,6 +712,9 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        preferred_read_replica: i32,
+        records: Option<Bytes>,
     ) -> Self {
         Self::new(
             11,
@@ -656,6 +723,11 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            preferred_read_replica,
+            records,
+            None,
+            None,
             None,
         )
     }
@@ -666,7 +738,12 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        preferred_read_replica: i32,
+        records: Option<Bytes>,
         diverging_epoch: Option<EpochEndOffset>,
+        current_leader: Option<LeaderIdAndEpoch>,
+        snapshot_id: Option<SnapshotId>,
     ) -> Self {
         Self::new(
             12,
@@ -675,7 +752,12 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            preferred_read_replica,
+            records,
             diverging_epoch,
+            current_leader,
+            snapshot_id,
         )
     }
 
@@ -685,7 +767,12 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        preferred_read_replica: i32,
+        records: Option<Bytes>,
         diverging_epoch: Option<EpochEndOffset>,
+        current_leader: Option<LeaderIdAndEpoch>,
+        snapshot_id: Option<SnapshotId>,
     ) -> Self {
         Self::new(
             13,
@@ -694,7 +781,12 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            preferred_read_replica,
+            records,
             diverging_epoch,
+            current_leader,
+            snapshot_id,
         )
     }
 
@@ -704,7 +796,12 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        preferred_read_replica: i32,
+        records: Option<Bytes>,
         diverging_epoch: Option<EpochEndOffset>,
+        current_leader: Option<LeaderIdAndEpoch>,
+        snapshot_id: Option<SnapshotId>,
     ) -> Self {
         Self::new(
             14,
@@ -713,7 +810,12 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            preferred_read_replica,
+            records,
             diverging_epoch,
+            current_leader,
+            snapshot_id,
         )
     }
 
@@ -723,7 +825,12 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        preferred_read_replica: i32,
+        records: Option<Bytes>,
         diverging_epoch: Option<EpochEndOffset>,
+        current_leader: Option<LeaderIdAndEpoch>,
+        snapshot_id: Option<SnapshotId>,
     ) -> Self {
         Self::new(
             15,
@@ -732,7 +839,12 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            preferred_read_replica,
+            records,
             diverging_epoch,
+            current_leader,
+            snapshot_id,
         )
     }
 
@@ -742,7 +854,12 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        preferred_read_replica: i32,
+        records: Option<Bytes>,
         diverging_epoch: Option<EpochEndOffset>,
+        current_leader: Option<LeaderIdAndEpoch>,
+        snapshot_id: Option<SnapshotId>,
     ) -> Self {
         Self::new(
             16,
@@ -751,7 +868,12 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            preferred_read_replica,
+            records,
             diverging_epoch,
+            current_leader,
+            snapshot_id,
         )
     }
 
@@ -761,7 +883,12 @@ impl PartitionData {
         high_watermark: i64,
         last_stable_offset: Option<i64>,
         log_start_offset: Option<i64>,
+        aborted_transactions: Option<Vec<AbortedTransaction>>,
+        preferred_read_replica: i32,
+        records: Option<Bytes>,
         diverging_epoch: Option<EpochEndOffset>,
+        current_leader: Option<LeaderIdAndEpoch>,
+        snapshot_id: Option<SnapshotId>,
     ) -> Self {
         Self::new(
             17,
@@ -770,8 +897,17 @@ impl PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            preferred_read_replica,
+            records,
             diverging_epoch,
+            current_leader,
+            snapshot_id,
         )
+    }
+
+    pub fn aborted_transactions(&self) -> Option<&[AbortedTransaction]> {
+        self.aborted_transactions.as_deref()
     }
 }
 impl ReadableVersion for PartitionData {
@@ -785,18 +921,34 @@ impl ReadableVersion for PartitionData {
         let high_watermark = i64::read(buffer);
         let last_stable_offset = i64::read(buffer);
         let log_start_offset = if version >= 5 { i64::read(buffer) } else { -1 };
+        let aborted_transactions = if version <= 11 {
+            Array::<AbortedTransaction>::read_version_inner(buffer, version)
+        } else {
+            CompactArray::<AbortedTransaction>::read_version_inner(buffer, version)
+        }?;
+        let preferred_read_replica = if version >= 11 { i32::read(buffer) } else { -1 };
+        let records = if version <= 11 {
+            KafkaString::read_inner(buffer)
+        } else {
+            CompactKafkaString::read_result_inner(buffer)?
+        };
 
         let mut diverging_epoch = None;
+        let mut current_leader = None;
+        let mut snapshot_id = None;
         if version >= 12 {
             let tagged_fields = TaggedFields::read_result_inner(buffer)?;
             for tf in tagged_fields {
                 let mut data = tf.data;
                 match tf.key {
                     0 => {
-                        if version >= 12 {
-                            diverging_epoch
-                                .replace(EpochEndOffset::read_version(&mut data, version)?);
-                        }
+                        diverging_epoch.replace(EpochEndOffset::read_version(&mut data, version)?);
+                    }
+                    1 => {
+                        current_leader.replace(LeaderIdAndEpoch::read_version(&mut data, version)?);
+                    }
+                    2 => {
+                        snapshot_id.replace(SnapshotId::read_version(&mut data, version)?);
                     }
                     _ => continue,
                 }
@@ -810,7 +962,12 @@ impl ReadableVersion for PartitionData {
             high_watermark,
             last_stable_offset,
             log_start_offset,
+            aborted_transactions,
+            preferred_read_replica,
+            records,
             diverging_epoch,
+            current_leader,
+            snapshot_id,
         })
     }
 }
@@ -823,16 +980,199 @@ impl Writable for PartitionData {
         if self.version >= 5 {
             self.log_start_offset.write(buffer);
         }
+        if self.version <= 11 {
+            Array::write_inner(buffer, self.aborted_transactions());
+        } else {
+            CompactArray::write_inner(buffer, self.aborted_transactions());
+        }
+        if self.version >= 11 {
+            self.preferred_read_replica.write(buffer);
+        }
+        if self.version <= 11 {
+            KafkaString::write_inner(buffer, self.records.as_deref());
+        } else {
+            CompactKafkaString::write_inner(buffer, self.records.as_deref());
+        }
+
         if self.version >= 12 {
             let mut tagged_fields = Vec::new();
             if let Some(diverging_epoch) = &self.diverging_epoch {
-                let mut data = BytesMut::with_capacity(16);
+                let mut data = BytesMut::with_capacity(12);
                 diverging_epoch.write(&mut data);
                 tagged_fields.push(TaggedField::new(0, data.freeze()));
             }
 
+            if let Some(current_leader) = &self.current_leader {
+                let mut data = BytesMut::with_capacity(8);
+                current_leader.write(&mut data);
+                tagged_fields.push(TaggedField::new(1, data.freeze()));
+            }
+
+            if let Some(snapshot_id) = &self.snapshot_id {
+                let mut data = BytesMut::with_capacity(12);
+                snapshot_id.write(&mut data);
+                tagged_fields.push(TaggedField::new(2, data.freeze()));
+            }
+
             TaggedFields::write_inner(buffer, &tagged_fields);
         } else {
+            TaggedFields::write_empty(buffer);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AbortedTransaction {
+    version: i16,
+    producer_id: i64,
+    first_offset: i64,
+}
+impl AbortedTransaction {
+    pub fn v4(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 4,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v5(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 5,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v6(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 6,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v7(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 7,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v8(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 8,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v9(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 9,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v10(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 10,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v11(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 11,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v12(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 12,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v13(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 13,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v14(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 14,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v15(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 15,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v16(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 16,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn v17(producer_id: i64, first_offset: i64) -> Self {
+        Self {
+            version: 17,
+            producer_id,
+            first_offset,
+        }
+    }
+
+    pub fn producer_id(&self) -> i64 {
+        self.producer_id
+    }
+
+    pub fn first_offset(&self) -> i64 {
+        self.first_offset
+    }
+}
+impl ReadableVersion for AbortedTransaction {
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        if !(4..=17).contains(&version) {
+            return Err(protocol::Error::UnsupportedVersion);
+        }
+
+        let producer_id = i64::read(buffer);
+        let first_offset = i64::read(buffer);
+        if version >= 12 {
+            let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
+        }
+
+        Ok(Self {
+            version,
+            producer_id,
+            first_offset,
+        })
+    }
+}
+impl Writable for AbortedTransaction {
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.producer_id.write(buffer);
+        self.first_offset.write(buffer);
+
+        if self.version >= 12 {
             TaggedFields::write_empty(buffer);
         }
     }
@@ -873,6 +1213,90 @@ impl Writable for EpochEndOffset {
     fn write(&self, buffer: &mut impl BufMut) {
         self.epoch.write(buffer);
         self.end_offset.write(buffer);
+        TaggedFields::write_empty(buffer);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LeaderIdAndEpoch {
+    leader_id: i32,
+    leader_epoch: i32,
+}
+impl LeaderIdAndEpoch {
+    pub fn new(leader_id: i32, leader_epoch: i32) -> Self {
+        Self {
+            leader_id,
+            leader_epoch,
+        }
+    }
+
+    pub fn leader_id(&self) -> i32 {
+        self.leader_id
+    }
+
+    pub fn leader_epoch(&self) -> i32 {
+        self.leader_epoch
+    }
+}
+impl ReadableVersion for LeaderIdAndEpoch {
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        if !(12..=17).contains(&version) {
+            return Err(protocol::Error::UnsupportedVersion);
+        }
+
+        let leader_id = i32::read(buffer);
+        let leader_epoch = i32::read(buffer);
+        let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
+
+        Ok(Self {
+            leader_id,
+            leader_epoch,
+        })
+    }
+}
+impl Writable for LeaderIdAndEpoch {
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.leader_id.write(buffer);
+        self.leader_epoch.write(buffer);
+        TaggedFields::write_empty(buffer);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SnapshotId {
+    end_offset: i64,
+    epoch: i32,
+}
+impl SnapshotId {
+    pub fn new(end_offset: i64, epoch: i32) -> Self {
+        Self { end_offset, epoch }
+    }
+
+    pub fn end_offset(&self) -> i64 {
+        self.end_offset
+    }
+
+    pub fn epoch(&self) -> i32 {
+        self.epoch
+    }
+}
+impl ReadableVersion for SnapshotId {
+    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+        if !(12..=17).contains(&version) {
+            return Err(protocol::Error::UnsupportedVersion);
+        }
+
+        let end_offset = i64::read(buffer);
+        let epoch = i32::read(buffer);
+        let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
+
+        Ok(Self { end_offset, epoch })
+    }
+}
+impl Writable for SnapshotId {
+    fn write(&self, buffer: &mut impl BufMut) {
+        self.end_offset.write(buffer);
+        self.epoch.write(buffer);
         TaggedFields::write_empty(buffer);
     }
 }
