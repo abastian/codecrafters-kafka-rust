@@ -12,6 +12,8 @@ use crate::{
     },
 };
 
+use super::topic_by_name;
+
 pub(crate) const API_KEY: i16 = 75;
 
 #[derive(Debug, Clone)]
@@ -482,11 +484,4 @@ pub fn process_request(
         topics,
         next_cursor: None,
     })
-}
-
-fn topic_by_name<'m>(
-    metadata: &'m HashMap<Uuid, model::Topic>,
-    name: &str,
-) -> Option<&'m model::Topic> {
-    metadata.values().find(|topic| topic.name() == name)
 }

@@ -7,8 +7,10 @@ pub(crate) mod response_header;
 use std::{collections::HashMap, sync::LazyLock};
 
 use bytes::{Buf, BufMut};
+use uuid::Uuid;
 
 use crate::{
+    model,
     protocol::{ReadableResult, Writable},
     FINALIZED_FEATURES, METADATA_CACHE, SUPPORTED_APIS, SUPPORTED_FEATURES,
 };
@@ -127,7 +129,10 @@ pub fn read_request(buffer: &mut impl Buf) -> Result<(RequestHeader, KafkaReques
 pub fn process_request(request: KafkaRequest) -> Result<KafkaResponse, super::Error> {
     match request {
         KafkaRequest::Fetch(request) => {
-            let response = process_fetch_request(request);
+            let response = match METADATA_CACHE.as_ref() {
+                Ok(metadata_cache) => process_fetch_request(request, metadata_cache)?,
+                Err(err) => return Err(err.clone()),
+            };
             Ok(KafkaResponse::Fetch(response))
         }
         KafkaRequest::ApiVersions(request) => {
@@ -181,4 +186,11 @@ pub fn write_response(
     };
 
     Ok(())
+}
+
+pub(crate) fn topic_by_name<'m>(
+    metadata: &'m HashMap<Uuid, model::Topic>,
+    name: &str,
+) -> Option<&'m model::Topic> {
+    metadata.values().find(|topic| topic.name() == name)
 }
