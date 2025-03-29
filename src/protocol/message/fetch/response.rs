@@ -1,4 +1,4 @@
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use uuid::Uuid;
 
 use crate::protocol::{
@@ -275,7 +275,7 @@ impl ReadableVersion for Response {
     }
 }
 impl Writable for Response {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write(&self, buffer: &mut impl BufMut) {
         self.throttle_time_ms.write(buffer);
         if self.version >= 7 {
             self.error_code.write(buffer);
@@ -463,7 +463,7 @@ impl ReadableVersion for FetchableTopicResponse {
     }
 }
 impl Writable for FetchableTopicResponse {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write(&self, buffer: &mut impl BufMut) {
         match &self.topic {
             TopicID::Name(bytes) => {
                 if self.version <= 11 {
@@ -815,7 +815,7 @@ impl ReadableVersion for PartitionData {
     }
 }
 impl Writable for PartitionData {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write(&self, buffer: &mut impl BufMut) {
         self.partition_index.write(buffer);
         self.error_code.write(buffer);
         self.high_watermark.write(buffer);
@@ -870,7 +870,7 @@ impl ReadableVersion for EpochEndOffset {
     }
 }
 impl Writable for EpochEndOffset {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write(&self, buffer: &mut impl BufMut) {
         self.epoch.write(buffer);
         self.end_offset.write(buffer);
         TaggedFields::write_empty(buffer);
@@ -933,7 +933,7 @@ impl ReadableVersion for NodeEndpoint {
     }
 }
 impl Writable for NodeEndpoint {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write(&self, buffer: &mut impl BufMut) {
         self.node_id.write(buffer);
         CompactKafkaString::write_inner(buffer, Some(self.host()));
         self.port.write(buffer);
