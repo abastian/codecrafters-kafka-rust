@@ -16,7 +16,6 @@ pub(crate) const API_KEY: i16 = 75;
 
 #[derive(Debug, Clone)]
 pub struct Request {
-    version: i16,
     topics: Vec<TopicRequest>,
     response_partition_limit: i32,
     cursor: Option<Cursor>,
@@ -28,7 +27,6 @@ impl Request {
         cursor: Option<Cursor>,
     ) -> Self {
         Request {
-            version: 0,
             topics,
             response_partition_limit,
             cursor,
@@ -60,7 +58,6 @@ impl ReadableVersion for Request {
         let cursor = NullableRecord::read_version(buffer, version)?;
         let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
         Ok(Request {
-            version,
             topics,
             response_partition_limit,
             cursor,
@@ -78,13 +75,11 @@ impl Writable for Request {
 
 #[derive(Debug, Clone)]
 pub struct TopicRequest {
-    version: i16,
     name: Bytes,
 }
 impl TopicRequest {
     pub fn v0(name: &str) -> Self {
         TopicRequest {
-            version: 0,
             name: Bytes::copy_from_slice(name.as_bytes()),
         }
     }
@@ -103,7 +98,7 @@ impl ReadableVersion for TopicRequest {
             protocol::Error::IllegalArgument("non-nullable field name was serialized as null"),
         )?;
         let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
-        Ok(TopicRequest { version, name })
+        Ok(TopicRequest { name })
     }
 }
 impl Writable for TopicRequest {
@@ -115,14 +110,12 @@ impl Writable for TopicRequest {
 
 #[derive(Debug, Clone)]
 pub struct Cursor {
-    version: i16,
     topic_name: Bytes,
     partition_index: i32,
 }
 impl Cursor {
     pub fn v0(topic_name: &str, partition_index: i32) -> Self {
         Cursor {
-            version: 0,
             topic_name: Bytes::copy_from_slice(topic_name.as_bytes()),
             partition_index,
         }
@@ -148,7 +141,6 @@ impl ReadableVersion for Cursor {
         let partition_index = i32::read(buffer);
         let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
         Ok(Cursor {
-            version,
             topic_name,
             partition_index,
         })
@@ -164,7 +156,6 @@ impl Writable for Cursor {
 
 #[derive(Debug, Clone)]
 pub struct Response {
-    version: i16,
     throttle_time_ms: i32,
     topics: Vec<DescribeTopicPartitionsResponseTopic>,
     next_cursor: Option<Cursor>,
@@ -176,7 +167,6 @@ impl Response {
         next_cursor: Option<Cursor>,
     ) -> Self {
         Response {
-            version: 0,
             throttle_time_ms,
             topics,
             next_cursor,
@@ -207,7 +197,6 @@ impl ReadableVersion for Response {
         )?;
         let next_cursor = NullableRecord::read_version(buffer, version)?;
         Ok(Response {
-            version,
             throttle_time_ms,
             topics,
             next_cursor,
@@ -225,7 +214,6 @@ impl Writable for Response {
 
 #[derive(Debug, Clone)]
 pub struct DescribeTopicPartitionsResponseTopic {
-    version: i16,
     error_code: i16,
     name: Option<Bytes>,
     topic_id: Uuid,
@@ -243,7 +231,6 @@ impl DescribeTopicPartitionsResponseTopic {
         topic_authorized_operations: i32,
     ) -> Self {
         Self {
-            version: 0,
             error_code,
             name: name.map(|n| Bytes::copy_from_slice(n.as_bytes())),
             topic_id,
@@ -295,7 +282,6 @@ impl ReadableVersion for DescribeTopicPartitionsResponseTopic {
         let topic_authorized_operations = i32::read(buffer);
         let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
         Ok(Self {
-            version,
             error_code,
             name,
             topic_id,
@@ -319,7 +305,6 @@ impl Writable for DescribeTopicPartitionsResponseTopic {
 
 #[derive(Debug, Clone)]
 pub struct DescribeTopicPartitionsResponsePartition {
-    version: i16,
     error_code: i16,
     partition_index: i32,
     leader_id: i32,
@@ -343,7 +328,6 @@ impl DescribeTopicPartitionsResponsePartition {
         offline_replicas: Vec<i32>,
     ) -> Self {
         Self {
-            version: 0,
             error_code,
             partition_index,
             leader_id,
@@ -416,7 +400,6 @@ impl ReadableVersion for DescribeTopicPartitionsResponsePartition {
                 "non-nullable field offlineReplicas was serialized as null",
             ))?;
         Ok(Self {
-            version,
             error_code,
             partition_index,
             leader_id,
@@ -454,7 +437,6 @@ pub fn process_request(
             let topic_name = std::str::from_utf8(tr.name())?;
             let response = if let Some(topic) = topic_by_name(metadata, topic_name) {
                 DescribeTopicPartitionsResponseTopic {
-                    version: request.version,
                     error_code: 0,
                     name: Some(tr.name.clone()),
                     topic_id: topic.id(),
@@ -463,7 +445,6 @@ pub fn process_request(
                         let mut result = vec![];
                         for (index, partition) in topic.partitions().iter().enumerate() {
                             result.push(DescribeTopicPartitionsResponsePartition {
-                                version: request.version,
                                 error_code: 0,
                                 partition_index: index as i32,
                                 leader_id: partition.leader(),
@@ -483,7 +464,6 @@ pub fn process_request(
                 }
             } else {
                 DescribeTopicPartitionsResponseTopic {
-                    version: request.version,
                     error_code: 3,
                     name: Some(tr.name.clone()),
                     topic_id: Uuid::nil(),
@@ -498,7 +478,6 @@ pub fn process_request(
         result
     };
     Ok(Response {
-        version: request.version,
         throttle_time_ms: 0,
         topics,
         next_cursor: None,

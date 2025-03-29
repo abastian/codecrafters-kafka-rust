@@ -105,15 +105,13 @@ impl Writable for Request {
 
 #[derive(Debug, Clone)]
 pub struct SupportedFeature {
-    version: i16,
     name: Bytes,
     min_version: i16,
     max_version: i16,
 }
 impl SupportedFeature {
-    fn new(version: i16, name: &[u8], min_version: i16, max_version: i16) -> Self {
+    fn new(name: &[u8], min_version: i16, max_version: i16) -> Self {
         Self {
-            version,
             name: Bytes::copy_from_slice(name),
             min_version,
             max_version,
@@ -121,11 +119,11 @@ impl SupportedFeature {
     }
 
     pub fn v3(name: &str, min_version: i16, max_version: i16) -> Self {
-        Self::new(3, name.as_bytes(), min_version, max_version)
+        Self::new(name.as_bytes(), min_version, max_version)
     }
 
     pub fn v4(name: &str, min_version: i16, max_version: i16) -> Self {
-        Self::new(4, name.as_bytes(), min_version, max_version)
+        Self::new(name.as_bytes(), min_version, max_version)
     }
 
     pub fn name(&self) -> &[u8] {
@@ -153,7 +151,6 @@ impl ReadableVersion for SupportedFeature {
         let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
 
         Ok(Self {
-            version,
             name,
             min_version,
             max_version,
@@ -267,15 +264,13 @@ impl Writable for ApiKey {
 
 #[derive(Debug, Clone)]
 pub struct FinalizedFeature {
-    version: i16,
     name: Bytes,
     max_version_level: i16,
     min_version_level: i16,
 }
 impl FinalizedFeature {
-    fn new(version: i16, name: &[u8], max_version_level: i16, min_version_level: i16) -> Self {
+    fn new(name: &[u8], max_version_level: i16, min_version_level: i16) -> Self {
         Self {
-            version,
             name: Bytes::copy_from_slice(name),
             max_version_level,
             min_version_level,
@@ -283,11 +278,11 @@ impl FinalizedFeature {
     }
 
     pub fn v3(name: &str, max_version_level: i16, min_version_level: i16) -> Self {
-        Self::new(3, name.as_bytes(), max_version_level, min_version_level)
+        Self::new(name.as_bytes(), max_version_level, min_version_level)
     }
 
     pub fn v4(name: &str, max_version_level: i16, min_version_level: i16) -> Self {
-        Self::new(4, name.as_bytes(), max_version_level, min_version_level)
+        Self::new(name.as_bytes(), max_version_level, min_version_level)
     }
 
     pub fn name(&self) -> &[u8] {
@@ -316,7 +311,6 @@ impl ReadableVersion for FinalizedFeature {
         let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
 
         Ok(Self {
-            version,
             name,
             max_version_level,
             min_version_level,
