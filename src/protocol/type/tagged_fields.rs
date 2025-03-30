@@ -32,7 +32,7 @@ impl ReadableResult for TaggedField {
 impl Writable for TaggedField {
     fn write(&self, buffer: &mut impl BufMut) {
         write_unsigned_varint(buffer, self.key);
-        buffer.put(self.data.clone());
+        buffer.put_slice(self.data.as_ref());
     }
 }
 

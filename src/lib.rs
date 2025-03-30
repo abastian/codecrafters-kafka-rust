@@ -1,9 +1,12 @@
-use std::{collections::HashMap, fs::File, io::Read, sync::LazyLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 use model::Topic;
 use protocol::{
-    message::api_versions::{ApiKey, FinalizedFeature, SupportedFeature},
-    ReadableResult, ReadableVersion,
+    message::{
+        api_versions::{ApiKey, FinalizedFeature, SupportedFeature},
+        fetch::read_record_batches,
+    },
+    Readable, ReadableVersion,
 };
 
 pub mod metadata;
@@ -28,86 +31,56 @@ pub(crate) static FINALIZED_FEATURES: LazyLock<HashMap<String, FinalizedFeature>
 pub(crate) static METADATA_CACHE: LazyLock<Result<HashMap<uuid::Uuid, Topic>, protocol::Error>> =
     LazyLock::new(|| {
         let mut topics = HashMap::new();
-        let mut buffer = vec![0u8; 8192];
-        let mut file =
-            File::open("/tmp/kraft-combined-logs/__cluster_metadata-0/00000000000000000000.log")
-                .map_err(|err| protocol::Error::IOError(err.to_string()))?;
-        let mut left_sz = 0usize;
-        loop {
-            let read_sz = file
-                .read(&mut buffer[left_sz..])
-                .map_err(|err| protocol::Error::IOError(err.to_string()))?;
-            if read_sz == 0 {
-                break;
-            }
-            buffer.truncate(left_sz + read_sz);
-
-            let mut read_buffer = &buffer[0..];
-            loop {
-                match metadata::RecordBatch::read_result(&mut read_buffer) {
-                    Ok(rb) => {
-                        if rb.is_control_batch() {
-                            continue;
-                        }
-                        for rec in rb.records() {
-                            if let metadata::Record::Value(rec) = rec {
-                                let value = rec.value();
-                                let r#type = value.r#type();
-                                let version = value.version() as i16;
-                                let mut data = value.data().clone();
-                                match r#type as i16 {
-                                    metadata::records::topic_record::API_KEY => {
-                                        let topic_record =
-                                            metadata::records::TopicRecord::read_version(
-                                                &mut data, version,
-                                            )?;
-                                        let topic_id = topic_record.topic_id();
-                                        let topic_name =
-                                            std::str::from_utf8(topic_record.name())?.to_string();
-                                        let topic = model::Topic::new(topic_id, topic_name);
-                                        topics.insert(topic_id, topic);
-                                    }
-                                    metadata::records::partition_record::API_KEY => {
-                                        let partition_record =
-                                            metadata::records::PartitionRecord::read_version(
-                                                &mut data, version,
-                                            )?;
-                                        let topic_id = partition_record.topic_id();
-                                        let partition = model::Partition::new(
-                                            partition_record.partition_id(),
-                                            partition_record.leader(),
-                                            partition_record.leader_epoch(),
-                                            partition_record.replicas().to_vec(),
-                                            partition_record.isr().to_vec(),
-                                            partition_record
-                                                .eligible_leader_replicas()
-                                                .map(|v| v.to_vec()),
-                                            partition_record.last_known_elr().map(|v| v.to_vec()),
-                                        );
-                                        if let Some(topic) = topics.get_mut(&topic_id) {
-                                            topic.add_partition(partition);
-                                        }
-                                    }
-                                    _ => {
-                                        continue;
-                                    }
-                                }
-                            } else {
-                                unreachable!()
+        for rb in read_record_batches(
+            "/tmp/kraft-combined-logs",
+            "__cluster_metadata-0/00000000000000000000.log",
+        )? {
+            for rec in rb.records() {
+                match rec {
+                    metadata::Record::Value(value_record) => {
+                        let mut metadata_buffer = value_record.value().clone();
+                        let value = metadata::MetadataValue::read(&mut metadata_buffer);
+                        let r#type = value.r#type();
+                        let version = value.version() as i16;
+                        let mut data = value.data().clone();
+                        match r#type as i16 {
+                            metadata::records::topic_record::API_KEY => {
+                                let topic_record = metadata::records::TopicRecord::read_version(
+                                    &mut data, version,
+                                )?;
+                                let topic_id = topic_record.topic_id();
+                                let topic_name =
+                                    std::str::from_utf8(topic_record.name())?.to_string();
+                                let topic = model::Topic::new(topic_id, topic_name);
+                                topics.insert(topic_id, topic);
                             }
+                            metadata::records::partition_record::API_KEY => {
+                                let partition_record =
+                                    metadata::records::PartitionRecord::read_version(
+                                        &mut data, version,
+                                    )?;
+                                let topic_id = partition_record.topic_id();
+                                let partition = model::Partition::new(
+                                    partition_record.partition_id(),
+                                    partition_record.leader(),
+                                    partition_record.leader_epoch(),
+                                    partition_record.replicas().to_vec(),
+                                    partition_record.isr().to_vec(),
+                                    partition_record
+                                        .eligible_leader_replicas()
+                                        .map(|v| v.to_vec()),
+                                    partition_record.last_known_elr().map(|v| v.to_vec()),
+                                );
+                                if let Some(topic) = topics.get_mut(&topic_id) {
+                                    topic.add_partition(partition);
+                                }
+                            }
+                            _ => continue,
                         }
                     }
-                    Err(protocol::Error::BufferUnderflow) => {
-                        break;
-                    }
-                    Err(err) => {
-                        return Err(err);
-                    }
+                    metadata::Record::Control(_) => continue,
                 }
             }
-
-            left_sz = read_buffer.len();
-            buffer.copy_within(left_sz.., 0);
         }
 
         Ok(topics)

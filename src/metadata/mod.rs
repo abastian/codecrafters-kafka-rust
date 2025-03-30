@@ -83,13 +83,13 @@ impl Writable for ControlRecord {
 }
 
 #[derive(Debug, Clone)]
-pub struct ValueData {
+pub struct MetadataValue {
     frame_version: u8,
     r#type: u8,
     version: u8,
     data: Bytes,
 }
-impl ValueData {
+impl MetadataValue {
     pub fn new(frame_version: u8, r#type: u8, version: u8, data: Bytes) -> Self {
         Self {
             frame_version,
@@ -115,7 +115,7 @@ impl ValueData {
         &self.data
     }
 }
-impl Readable for ValueData {
+impl Readable for MetadataValue {
     fn read(buffer: &mut impl Buf) -> Self {
         let frame_version = u8::read(buffer);
         let r#type = u8::read(buffer);
@@ -132,7 +132,7 @@ impl Readable for ValueData {
         }
     }
 }
-impl Writable for ValueData {
+impl Writable for MetadataValue {
     fn write(&self, buffer: &mut impl BufMut) {
         self.frame_version.write(buffer);
         self.r#type.write(buffer);
@@ -147,7 +147,7 @@ pub struct ValueRecord {
     timestamp_delta: i64,
     offset_delta: i32,
     key: Option<Bytes>,
-    value: ValueData,
+    value: Bytes,
     headers: Vec<Header>,
 }
 impl ValueRecord {
@@ -156,7 +156,7 @@ impl ValueRecord {
         timestamp_delta: i64,
         offset_delta: i32,
         key: Option<&str>,
-        value: ValueData,
+        value: Bytes,
         headers: Vec<Header>,
     ) -> Self {
         Self {
@@ -185,7 +185,7 @@ impl ValueRecord {
         self.key.as_deref()
     }
 
-    pub fn value(&self) -> &ValueData {
+    pub fn value(&self) -> &Bytes {
         &self.value
     }
 
@@ -211,8 +211,7 @@ impl ReadableResult for ValueRecord {
         };
         let value = {
             let value_length = VarInt::read_result_inner(&mut inner_buffer)? as usize;
-            let mut inner_buffer = inner_buffer.copy_to_bytes(value_length);
-            ValueData::read(&mut inner_buffer)
+            inner_buffer.copy_to_bytes(value_length)
         };
         let headers = {
             let length = VarInt::read_result_inner(&mut inner_buffer)?;
@@ -246,8 +245,8 @@ impl Writable for ValueRecord {
                 1u8.write(&mut inner_buffer);
             }
         }
-        VarInt::write_inner(&mut inner_buffer, self.value.data.len() as i32 + 3);
-        self.value.write(&mut inner_buffer);
+        VarInt::write_inner(&mut inner_buffer, self.value.len() as i32);
+        inner_buffer.put_slice(self.value().as_ref());
         VarInt::write_inner(&mut inner_buffer, self.headers.len() as i32);
         for header in &self.headers {
             header.write(&mut inner_buffer);
@@ -256,7 +255,7 @@ impl Writable for ValueRecord {
         let inner_buffer = inner_buffer.freeze();
         let record_length = inner_buffer.len();
         VarInt::write_inner(buffer, record_length as i32);
-        buffer.put_slice(&inner_buffer);
+        buffer.put_slice(inner_buffer.as_ref());
     }
 }
 
@@ -438,14 +437,19 @@ impl Writable for RecordBatch {
         self.base_sequence.write(&mut inner_buffer);
         {
             let records_length = self.records.len() as i32;
-            VarInt::write_inner(&mut inner_buffer, records_length);
+            records_length.write(&mut inner_buffer);
             for record in &self.records {
                 record.write(&mut inner_buffer);
             }
         }
 
         let inner_buffer = inner_buffer.freeze();
-        let crc = crc32c::crc32c(&inner_buffer);
+        let crc = {
+            let data = inner_buffer.as_ref();
+            println!("data len: {}", data.len());
+            crc32c::crc32c(data)
+        };
+        println!("crc: {:#x}", crc);
         let batch_length = inner_buffer.len() as i32;
         self.base_offset.write(buffer);
         batch_length.write(buffer);

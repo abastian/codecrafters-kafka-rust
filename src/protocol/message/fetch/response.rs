@@ -906,8 +906,48 @@ impl PartitionData {
         )
     }
 
+    pub fn partition_index(&self) -> i32 {
+        self.partition_index
+    }
+
+    pub fn error_code(&self) -> i16 {
+        self.error_code
+    }
+
+    pub fn high_watermark(&self) -> i64 {
+        self.high_watermark
+    }
+
+    pub fn last_stable_offset(&self) -> i64 {
+        self.last_stable_offset
+    }
+
+    pub fn log_start_offset(&self) -> i64 {
+        self.log_start_offset
+    }
+
     pub fn aborted_transactions(&self) -> Option<&[AbortedTransaction]> {
         self.aborted_transactions.as_deref()
+    }
+
+    pub fn preferred_read_replica(&self) -> i32 {
+        self.preferred_read_replica
+    }
+
+    pub fn records(&self) -> Option<&Bytes> {
+        self.records.as_ref()
+    }
+
+    pub fn diverging_epoch(&self) -> Option<&EpochEndOffset> {
+        self.diverging_epoch.as_ref()
+    }
+
+    pub fn current_leader(&self) -> Option<&LeaderIdAndEpoch> {
+        self.current_leader.as_ref()
+    }
+
+    pub fn snapshot_id(&self) -> Option<&SnapshotId> {
+        self.snapshot_id.as_ref()
     }
 }
 impl ReadableVersion for PartitionData {

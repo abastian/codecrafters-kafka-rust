@@ -1,10 +1,17 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::Read,
+};
 
 use bytes::Bytes;
 use response::{FetchableTopicResponse, PartitionData};
 use uuid::Uuid;
 
-use crate::{model, protocol};
+use crate::{
+    metadata, model,
+    protocol::{self, ReadableResult},
+};
 
 use super::topic_by_name;
 
@@ -36,30 +43,43 @@ pub fn process_request(
         };
 
         let fetch_topic_response = match topic_opt {
-            Some(topic_metadata) => FetchableTopicResponse::new(
-                version,
-                topic_req.topic.clone(),
-                topic_metadata
-                    .partitions()
-                    .iter()
-                    .map(|p| {
-                        PartitionData::new(
+            Some(topic_metadata) => {
+                let partitions = {
+                    let mut values = Vec::new();
+                    for partition in topic_metadata.partitions() {
+                        let partition_index = partition.id();
+                        let rel_log_path = format!(
+                            "{}-{}/00000000000000000000.log",
+                            topic_metadata.name(),
+                            partition_index
+                        );
+
+                        let records = {
+                            let record_batches =
+                                read_record_file("/tmp/kraft-combined-logs", &rel_log_path)?;
+                            Some(Bytes::copy_from_slice(&record_batches))
+                        };
+
+                        values.push(PartitionData::new(
                             version,
-                            p.id(),
+                            partition_index,
                             0,
                             0,
                             None,
                             None,
                             None,
                             -1,
+                            records,
                             None,
                             None,
                             None,
-                            None,
-                        )
-                    })
-                    .collect(),
-            ),
+                        ))
+                    }
+
+                    values
+                };
+                FetchableTopicResponse::new(version, topic_req.topic.clone(), partitions)
+            }
             None => FetchableTopicResponse::new(
                 version,
                 topic_req.topic.clone(),
@@ -80,4 +100,62 @@ pub fn process_request(
         responses,
         node_endpoints: None,
     })
+}
+
+pub(crate) fn read_record_file(
+    base_path: &str,
+    rel_log_path: &str,
+) -> Result<Vec<u8>, protocol::Error> {
+    fs::read(format!("{}/{}", base_path, rel_log_path))
+        .map_err(|err| protocol::Error::IOError(err.to_string()))
+}
+
+pub(crate) fn read_record_batches(
+    base_path: &str,
+    rel_log_path: &str,
+) -> Result<Vec<metadata::RecordBatch>, protocol::Error> {
+    let mut result = Vec::new();
+    let mut buffer = vec![0u8; 8192];
+    let mut file = File::open(format!("{}/{}", base_path, rel_log_path))
+        .map_err(|err| protocol::Error::IOError(err.to_string()))?;
+    let mut left_sz = 0usize;
+
+    loop {
+        let read_sz = file
+            .read(&mut buffer[left_sz..])
+            .map_err(|err| protocol::Error::IOError(err.to_string()))?;
+        if read_sz == 0 {
+            break;
+        }
+        buffer.truncate(left_sz + read_sz);
+
+        let mut read_buffer = &buffer[0..];
+        loop {
+            //         if rb.is_control_batch() {
+            //             continue;
+            //         }
+            //         result.append(
+            //             &mut rb
+            //                 .records()
+            //                 .iter()
+            //                 .filter_map(|r| match r {
+            //                     metadata::Record::Value(value_record) => {
+            //                         Some(value_record.value().clone())
+            //                     }
+            //                     metadata::Record::Control(_) => None,
+            //                 })
+            //                 .collect::<Vec<_>>(),
+            //         );
+            match metadata::RecordBatch::read_result(&mut read_buffer) {
+                Ok(rb) => result.push(rb),
+                Err(protocol::Error::BufferUnderflow) => break,
+                Err(err) => return Err(err),
+            }
+        }
+
+        left_sz = read_buffer.len();
+        buffer.copy_within(left_sz.., 0);
+    }
+
+    Ok(result)
 }
