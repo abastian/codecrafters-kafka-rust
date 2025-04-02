@@ -454,6 +454,9 @@ impl ReadableVersion for FetchableTopicResponse {
         .ok_or(protocol::Error::IllegalArgument(
             "non-nullable field partitions was serialized as null",
         ))?;
+        if version >= 12 {
+            let _tagged_fields = TaggedFields::read_result_inner(buffer)?;
+        }
 
         Ok(Self {
             version,
