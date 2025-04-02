@@ -446,16 +446,14 @@ impl Writable for RecordBatch {
         let inner_buffer = inner_buffer.freeze();
         let crc = {
             let data = inner_buffer.as_ref();
-            println!("data len: {}", data.len());
             crc32c::crc32c(data)
         };
-        println!("crc: {:#x}", crc);
         let batch_length = inner_buffer.len() as i32;
         self.base_offset.write(buffer);
         batch_length.write(buffer);
         self.partition_leader_epoch.write(buffer);
         self.magic_byte.write(buffer);
         crc.write(buffer);
-        buffer.put_slice(&inner_buffer);
+        buffer.put_slice(inner_buffer.as_ref());
     }
 }

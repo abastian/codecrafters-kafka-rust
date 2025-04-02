@@ -57,7 +57,12 @@ pub fn process_request(
                         let records = {
                             let record_batches =
                                 read_record_file("/tmp/kraft-combined-logs", &rel_log_path)?;
-                            Some(Bytes::copy_from_slice(&record_batches))
+                            println!("read {} bytes from {}", record_batches.len(), rel_log_path);
+                            if record_batches.is_empty() {
+                                None
+                            } else {
+                                Some(Bytes::copy_from_slice(record_batches.as_ref()))
+                            }
                         };
 
                         values.push(PartitionData::new(
@@ -159,3 +164,6 @@ pub(crate) fn read_record_batches(
 
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests;
