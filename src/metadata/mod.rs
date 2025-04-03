@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 pub mod records;

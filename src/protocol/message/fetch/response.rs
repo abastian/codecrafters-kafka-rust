@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use uuid::Uuid;
 
@@ -955,7 +956,7 @@ impl PartitionData {
 }
 impl ReadableVersion for PartitionData {
     fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
-        if version < 4 || version > 17 {
+        if !(4..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
 
