@@ -228,7 +228,7 @@ impl Response {
     }
 }
 impl ReadableVersion for Response {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(7..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -276,7 +276,7 @@ impl ReadableVersion for Response {
     }
 }
 impl Writable for Response {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.throttle_time_ms.write(buffer);
         if self.version >= 7 {
             self.error_code.write(buffer);
@@ -428,7 +428,7 @@ impl FetchableTopicResponse {
     }
 }
 impl ReadableVersion for FetchableTopicResponse {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(4..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -467,7 +467,7 @@ impl ReadableVersion for FetchableTopicResponse {
     }
 }
 impl Writable for FetchableTopicResponse {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         match &self.topic {
             TopicID::Name(bytes) => {
                 if self.version <= 11 {
@@ -955,7 +955,7 @@ impl PartitionData {
     }
 }
 impl ReadableVersion for PartitionData {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(4..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -1016,7 +1016,7 @@ impl ReadableVersion for PartitionData {
     }
 }
 impl Writable for PartitionData {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.partition_index.write(buffer);
         self.error_code.write(buffer);
         self.high_watermark.write(buffer);
@@ -1193,7 +1193,7 @@ impl AbortedTransaction {
     }
 }
 impl ReadableVersion for AbortedTransaction {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(4..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -1212,7 +1212,7 @@ impl ReadableVersion for AbortedTransaction {
     }
 }
 impl Writable for AbortedTransaction {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.producer_id.write(buffer);
         self.first_offset.write(buffer);
 
@@ -1241,7 +1241,7 @@ impl EpochEndOffset {
     }
 }
 impl ReadableVersion for EpochEndOffset {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(12..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -1254,7 +1254,7 @@ impl ReadableVersion for EpochEndOffset {
     }
 }
 impl Writable for EpochEndOffset {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.epoch.write(buffer);
         self.end_offset.write(buffer);
         TaggedFields::write_empty(buffer);
@@ -1283,7 +1283,7 @@ impl LeaderIdAndEpoch {
     }
 }
 impl ReadableVersion for LeaderIdAndEpoch {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(12..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -1299,7 +1299,7 @@ impl ReadableVersion for LeaderIdAndEpoch {
     }
 }
 impl Writable for LeaderIdAndEpoch {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.leader_id.write(buffer);
         self.leader_epoch.write(buffer);
         TaggedFields::write_empty(buffer);
@@ -1325,7 +1325,7 @@ impl SnapshotId {
     }
 }
 impl ReadableVersion for SnapshotId {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(12..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -1338,7 +1338,7 @@ impl ReadableVersion for SnapshotId {
     }
 }
 impl Writable for SnapshotId {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.end_offset.write(buffer);
         self.epoch.write(buffer);
         TaggedFields::write_empty(buffer);
@@ -1379,7 +1379,7 @@ impl NodeEndpoint {
     }
 }
 impl ReadableVersion for NodeEndpoint {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(16..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -1401,7 +1401,7 @@ impl ReadableVersion for NodeEndpoint {
     }
 }
 impl Writable for NodeEndpoint {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.node_id.write(buffer);
         CompactKafkaString::write_inner(buffer, Some(self.host()));
         self.port.write(buffer);

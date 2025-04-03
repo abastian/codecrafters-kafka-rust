@@ -67,7 +67,7 @@ impl Request {
     }
 }
 impl ReadableVersion for Request {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         let (client_software_name, client_software_version) = if (3..=4).contains(&version) {
             let client_software_name = CompactKafkaString::read_result_inner(buffer)?.ok_or(
                 protocol::Error::IllegalArgument(
@@ -95,7 +95,7 @@ impl ReadableVersion for Request {
     }
 }
 impl Writable for Request {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         if self.version >= 3 {
             CompactKafkaString::write_inner(buffer, self.client_software_name());
             CompactKafkaString::write_inner(buffer, self.client_software_version());
@@ -140,7 +140,7 @@ impl SupportedFeature {
     }
 }
 impl ReadableVersion for SupportedFeature {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(3..=4).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -159,7 +159,7 @@ impl ReadableVersion for SupportedFeature {
     }
 }
 impl Writable for SupportedFeature {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         CompactKafkaString::write_inner(buffer, Some(self.name()));
         self.min_version.write(buffer);
         self.max_version.write(buffer);
@@ -233,7 +233,7 @@ impl ApiKey {
     }
 }
 impl ReadableVersion for ApiKey {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(0..=4).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -253,7 +253,7 @@ impl ReadableVersion for ApiKey {
     }
 }
 impl Writable for ApiKey {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.api_key.write(buffer);
         self.min_version.write(buffer);
         self.max_version.write(buffer);
@@ -299,7 +299,7 @@ impl FinalizedFeature {
     }
 }
 impl ReadableVersion for FinalizedFeature {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(3..=4).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -319,7 +319,7 @@ impl ReadableVersion for FinalizedFeature {
     }
 }
 impl Writable for FinalizedFeature {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         CompactKafkaString::write_inner(buffer, Some(self.name()));
         self.max_version_level.write(buffer);
         self.min_version_level.write(buffer);
@@ -471,7 +471,7 @@ impl Response {
     }
 }
 impl ReadableVersion for Response {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(0..=4).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -545,7 +545,7 @@ impl ReadableVersion for Response {
     }
 }
 impl Writable for Response {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.error_code.write(buffer);
         if self.version >= 3 {
             CompactArray::write_inner(buffer, Some(self.api_keys()));

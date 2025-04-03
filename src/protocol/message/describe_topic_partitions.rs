@@ -49,7 +49,7 @@ impl Request {
     }
 }
 impl ReadableVersion for Request {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if version != 0 {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -68,7 +68,7 @@ impl ReadableVersion for Request {
     }
 }
 impl Writable for Request {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         CompactArray::write_inner(buffer, Some(self.topics()));
         self.response_partition_limit.write(buffer);
         NullableRecord::write_inner(buffer, self.cursor());
@@ -92,7 +92,7 @@ impl TopicRequest {
     }
 }
 impl ReadableVersion for TopicRequest {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if version != 0 {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -105,7 +105,7 @@ impl ReadableVersion for TopicRequest {
     }
 }
 impl Writable for TopicRequest {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         CompactKafkaString::write_inner(buffer, Some(self.name()));
         TaggedFields::write_empty(buffer);
     }
@@ -133,7 +133,7 @@ impl Cursor {
     }
 }
 impl ReadableVersion for Cursor {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if version != 0 {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -150,7 +150,7 @@ impl ReadableVersion for Cursor {
     }
 }
 impl Writable for Cursor {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         CompactKafkaString::write_inner(buffer, Some(self.topic_name()));
         self.partition_index.write(buffer);
         TaggedFields::write_empty(buffer);
@@ -189,7 +189,7 @@ impl Response {
     }
 }
 impl ReadableVersion for Response {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if version != 0 {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -207,7 +207,7 @@ impl ReadableVersion for Response {
     }
 }
 impl Writable for Response {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.throttle_time_ms.write(buffer);
         CompactArray::write_inner(buffer, Some(self.topics()));
         NullableRecord::write_inner(buffer, self.next_cursor());
@@ -268,7 +268,7 @@ impl DescribeTopicPartitionsResponseTopic {
     }
 }
 impl ReadableVersion for DescribeTopicPartitionsResponseTopic {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if version != 0 {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -295,7 +295,7 @@ impl ReadableVersion for DescribeTopicPartitionsResponseTopic {
     }
 }
 impl Writable for DescribeTopicPartitionsResponseTopic {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.error_code.write(buffer);
         CompactKafkaString::write_inner(buffer, self.name());
         self.topic_id.write(buffer);
@@ -380,7 +380,7 @@ impl DescribeTopicPartitionsResponsePartition {
     }
 }
 impl ReadableVersion for DescribeTopicPartitionsResponsePartition {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if version != 0 {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -416,7 +416,7 @@ impl ReadableVersion for DescribeTopicPartitionsResponsePartition {
     }
 }
 impl Writable for DescribeTopicPartitionsResponsePartition {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.error_code.write(buffer);
         self.partition_index.write(buffer);
         self.leader_id.write(buffer);

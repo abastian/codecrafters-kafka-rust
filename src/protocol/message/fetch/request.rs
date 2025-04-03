@@ -1,5 +1,5 @@
 #![allow(clippy::too_many_arguments)]
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use uuid::Uuid;
 
 use crate::protocol::{
@@ -490,7 +490,7 @@ impl Request {
     }
 }
 impl ReadableVersion for Request {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(4..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -570,7 +570,7 @@ impl ReadableVersion for Request {
     }
 }
 impl Writable for Request {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         if self.version <= 14 {
             self.replica_id.write(buffer);
         }
@@ -656,7 +656,7 @@ impl ReplicaState {
     }
 }
 impl ReadableVersion for ReplicaState {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(15..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -672,7 +672,7 @@ impl ReadableVersion for ReplicaState {
     }
 }
 impl Writable for ReplicaState {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.replica_id.write(buffer);
         self.replica_epoch.write(buffer);
         TaggedFields::write_empty(buffer);
@@ -819,7 +819,7 @@ impl FetchTopic {
     }
 }
 impl ReadableVersion for FetchTopic {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(4..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -858,7 +858,7 @@ impl ReadableVersion for FetchTopic {
     }
 }
 impl Writable for FetchTopic {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         match &self.topic {
             TopicID::Name(bytes) => {
                 if self.version <= 11 {
@@ -1200,7 +1200,7 @@ impl FetchPartition {
     }
 }
 impl ReadableVersion for FetchPartition {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(4..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -1239,7 +1239,7 @@ impl ReadableVersion for FetchPartition {
     }
 }
 impl Writable for FetchPartition {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.partition.write(buffer);
         if self.version >= 9 {
             self.current_leader_epoch.write(buffer);
@@ -1381,7 +1381,7 @@ impl ForgottenTopic {
     }
 }
 impl ReadableVersion for ForgottenTopic {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if !(7..=17).contains(&version) {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -1420,7 +1420,7 @@ impl ReadableVersion for ForgottenTopic {
     }
 }
 impl Writable for ForgottenTopic {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         match &self.topic {
             TopicID::Name(bytes) => {
                 if self.version <= 11 {

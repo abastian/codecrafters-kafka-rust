@@ -1,4 +1,4 @@
-use bytes::{Buf, Bytes};
+use bytes::{Buf, BufMut, Bytes};
 use uuid::Uuid;
 
 use crate::protocol::{
@@ -31,7 +31,7 @@ impl TopicRecord {
     }
 }
 impl ReadableVersion for TopicRecord {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if version != 0 {
             return Err(protocol::Error::UnsupportedVersion);
         }
@@ -45,7 +45,7 @@ impl ReadableVersion for TopicRecord {
     }
 }
 impl Writable for TopicRecord {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         CompactKafkaString::write_inner(buffer, Some(self.name()));
         self.topic_id.write(buffer);
         TaggedFields::write_empty(buffer);

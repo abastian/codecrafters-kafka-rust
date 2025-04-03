@@ -174,7 +174,7 @@ impl PartitionRecord {
     }
 }
 impl ReadableVersion for PartitionRecord {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if (0..=2).contains(&version) {
             let partition_id = buffer.get_i32();
             let topic_id = Uuid::read(buffer);
@@ -261,7 +261,7 @@ impl ReadableVersion for PartitionRecord {
     }
 }
 impl Writable for PartitionRecord {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.partition_id.write(buffer);
         self.topic_id.write(buffer);
         CompactArray::write_inner(buffer, Some(self.replicas()));

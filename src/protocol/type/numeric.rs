@@ -3,94 +3,94 @@ use bytes::{Buf, BufMut};
 use crate::protocol::{self, Readable, ReadableResult, Writable};
 
 impl Readable for bool {
-    fn read(buffer: &mut impl Buf) -> bool {
+    fn read<B: Buf>(buffer: &mut B) -> bool {
         u8::read(buffer) != 0
     }
 }
 impl Writable for bool {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         (if *self { 1u8 } else { 0u8 }).write(buffer);
     }
 }
 
 impl Readable for i8 {
-    fn read(buffer: &mut impl Buf) -> i8 {
+    fn read<B: Buf>(buffer: &mut B) -> i8 {
         buffer.get_i8()
     }
 }
 impl Writable for i8 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         buffer.put_i8(*self);
     }
 }
 
 impl Readable for u8 {
-    fn read(buffer: &mut impl Buf) -> u8 {
+    fn read<B: Buf>(buffer: &mut B) -> u8 {
         buffer.get_u8()
     }
 }
 impl Writable for u8 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         buffer.put_u8(*self);
     }
 }
 
 impl Readable for i16 {
-    fn read(buffer: &mut impl Buf) -> i16 {
+    fn read<B: Buf>(buffer: &mut B) -> i16 {
         buffer.get_i16()
     }
 }
 impl Writable for i16 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         buffer.put_i16(*self);
     }
 }
 
 impl Readable for u16 {
-    fn read(buffer: &mut impl Buf) -> u16 {
+    fn read<B: Buf>(buffer: &mut B) -> u16 {
         buffer.get_u16()
     }
 }
 impl Writable for u16 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         buffer.put_u16(*self);
     }
 }
 
 impl Readable for i32 {
-    fn read(buffer: &mut impl Buf) -> i32 {
+    fn read<B: Buf>(buffer: &mut B) -> i32 {
         buffer.get_i32()
     }
 }
 impl Writable for i32 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         buffer.put_i32(*self);
     }
 }
 
 impl Readable for u32 {
-    fn read(buffer: &mut impl Buf) -> u32 {
+    fn read<B: Buf>(buffer: &mut B) -> u32 {
         buffer.get_u32()
     }
 }
 impl Writable for u32 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         buffer.put_u32(*self);
     }
 }
 
 impl Readable for i64 {
-    fn read(buffer: &mut impl Buf) -> i64 {
+    fn read<B: Buf>(buffer: &mut B) -> i64 {
         buffer.get_i64()
     }
 }
 impl Writable for i64 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         buffer.put_i64(*self);
     }
 }
 
-pub(crate) fn write_unsigned_varint(buffer: &mut impl BufMut, value: u32) {
+pub(crate) fn write_unsigned_varint<B: BufMut>(buffer: &mut B, value: u32) {
     if (value & (0xFFFFFFFF << 7)) == 0 {
         (value as u8).write(buffer);
     } else {
@@ -114,7 +114,7 @@ pub(crate) fn write_unsigned_varint(buffer: &mut impl BufMut, value: u32) {
     }
 }
 
-pub(crate) fn read_unsigned_varint(buffer: &mut impl Buf) -> Result<u32, protocol::Error> {
+pub(crate) fn read_unsigned_varint<B: Buf>(buffer: &mut B) -> Result<u32, protocol::Error> {
     let tmp = i8::read(buffer);
     if tmp >= 0 {
         Ok((tmp as u8) as u32)
@@ -150,7 +150,7 @@ pub(crate) fn read_unsigned_varint(buffer: &mut impl Buf) -> Result<u32, protoco
     }
 }
 
-pub(crate) fn write_unsigned_varlong(buffer: &mut impl BufMut, mut value: u64) {
+pub(crate) fn write_unsigned_varlong<B: BufMut>(buffer: &mut B, mut value: u64) {
     while value & 0xFFFFFFFFFFFFFF80 != 0 {
         (value as u8 & 0x7F | 0x80).write(buffer);
         value >>= 7;
@@ -158,7 +158,7 @@ pub(crate) fn write_unsigned_varlong(buffer: &mut impl BufMut, mut value: u64) {
     (value as u8).write(buffer);
 }
 
-pub(crate) fn read_unsigned_varlong(buffer: &mut impl Buf) -> Result<u64, protocol::Error> {
+pub(crate) fn read_unsigned_varlong<B: Buf>(buffer: &mut B) -> Result<u64, protocol::Error> {
     let mut value: u64 = 0;
     let mut i = 0;
     loop {
@@ -184,12 +184,12 @@ impl VarInt {
         self.0
     }
 
-    pub(crate) fn read_result_inner(buffer: &mut impl Buf) -> Result<i32, protocol::Error> {
+    pub(crate) fn read_result_inner<B: Buf>(buffer: &mut B) -> Result<i32, protocol::Error> {
         let value = read_unsigned_varint(buffer)?;
         Ok((value as i32 >> 1) ^ -(value as i32 & 1))
     }
 
-    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: i32) {
+    pub(crate) fn write_inner<B: BufMut>(buffer: &mut B, value: i32) {
         let value = ((value << 1) ^ (value >> 31)) as u32;
         write_unsigned_varint(buffer, value);
     }
@@ -200,12 +200,12 @@ impl From<i32> for VarInt {
     }
 }
 impl ReadableResult for VarInt {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         Self::read_result_inner(buffer).map(Self)
     }
 }
 impl Writable for VarInt {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         Self::write_inner(buffer, self.0);
     }
 }
@@ -217,12 +217,12 @@ impl VarLong {
         self.0
     }
 
-    pub(crate) fn read_result_inner(buffer: &mut impl Buf) -> Result<i64, protocol::Error> {
+    pub(crate) fn read_result_inner<B: Buf>(buffer: &mut B) -> Result<i64, protocol::Error> {
         let value = read_unsigned_varlong(buffer)?;
         Ok((value as i64 >> 1) ^ -(value as i64 & 1))
     }
 
-    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: i64) {
+    pub(crate) fn write_inner<B: BufMut>(buffer: &mut B, value: i64) {
         let value = ((value << 1) ^ (value >> 63)) as u64;
         write_unsigned_varlong(buffer, value);
     }
@@ -233,23 +233,23 @@ impl From<i64> for VarLong {
     }
 }
 impl ReadableResult for VarLong {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         Self::read_result_inner(buffer).map(Self)
     }
 }
 impl Writable for VarLong {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         Self::write_inner(buffer, self.0);
     }
 }
 
 impl Readable for f64 {
-    fn read(buffer: &mut impl Buf) -> f64 {
+    fn read<B: Buf>(buffer: &mut B) -> f64 {
         buffer.get_f64()
     }
 }
 impl Writable for f64 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         buffer.put_f64(*self);
     }
 }

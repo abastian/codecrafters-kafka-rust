@@ -22,7 +22,7 @@ impl ResponseHeader {
     }
 }
 impl ReadableVersion for ResponseHeader {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         if (0..=1).contains(&version) {
             let correlation_id = i32::read(buffer);
             if version >= 1 {
@@ -38,7 +38,7 @@ impl ReadableVersion for ResponseHeader {
     }
 }
 impl Writable for ResponseHeader {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.correlation_id.write(buffer);
         if self.version >= 1 {
             TaggedFields::write_empty(buffer);

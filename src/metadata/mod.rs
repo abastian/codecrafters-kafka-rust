@@ -34,7 +34,7 @@ impl Header {
     }
 }
 impl ReadableResult for Header {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         let key_length = VarInt::read_result(buffer)?.value() as usize;
         let key = buffer.copy_to_bytes(key_length);
         let value_length = VarInt::read_result(buffer)?.value() as usize;
@@ -43,7 +43,7 @@ impl ReadableResult for Header {
     }
 }
 impl Writable for Header {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         VarInt::write_inner(buffer, self.key.len() as i32);
         buffer.put_slice(&self.key);
         VarInt::write_inner(buffer, self.value.len() as i32);
@@ -70,14 +70,14 @@ impl ControlRecord {
     }
 }
 impl Readable for ControlRecord {
-    fn read(buffer: &mut impl Buf) -> Self {
+    fn read<B: Buf>(buffer: &mut B) -> Self {
         let version = i16::read(buffer);
         let r#type = i16::read(buffer);
         Self { version, r#type }
     }
 }
 impl Writable for ControlRecord {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.version.write(buffer);
         self.r#type.write(buffer);
     }
@@ -117,7 +117,7 @@ impl MetadataValue {
     }
 }
 impl Readable for MetadataValue {
-    fn read(buffer: &mut impl Buf) -> Self {
+    fn read<B: Buf>(buffer: &mut B) -> Self {
         let frame_version = u8::read(buffer);
         let r#type = u8::read(buffer);
         let version = u8::read(buffer);
@@ -134,7 +134,7 @@ impl Readable for MetadataValue {
     }
 }
 impl Writable for MetadataValue {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.frame_version.write(buffer);
         self.r#type.write(buffer);
         self.version.write(buffer);
@@ -195,7 +195,7 @@ impl ValueRecord {
     }
 }
 impl ReadableResult for ValueRecord {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         let length = VarInt::read_result_inner(buffer)? as usize;
         let mut inner_buffer = buffer.copy_to_bytes(length);
 
@@ -233,7 +233,7 @@ impl ReadableResult for ValueRecord {
     }
 }
 impl Writable for ValueRecord {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         let mut inner_buffer = BytesMut::with_capacity(64);
         self.attributes.write(&mut inner_buffer);
         self.timestamp_delta.write(&mut inner_buffer);
@@ -266,7 +266,7 @@ pub enum Record {
     Control(ControlRecord),
 }
 impl Writable for Record {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         match self {
             Record::Value(record) => record.write(buffer),
             Record::Control(record) => record.write(buffer),
@@ -366,7 +366,7 @@ impl RecordBatch {
     }
 }
 impl ReadableResult for RecordBatch {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         if buffer.remaining() < 12 {
             return Err(protocol::Error::BufferUnderflow);
         }
@@ -427,7 +427,7 @@ impl ReadableResult for RecordBatch {
     }
 }
 impl Writable for RecordBatch {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         let mut inner_buffer = BytesMut::with_capacity(64);
         self.attributes.write(&mut inner_buffer);
         self.last_offset_delta.write(&mut inner_buffer);

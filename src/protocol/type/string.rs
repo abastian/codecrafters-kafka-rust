@@ -11,11 +11,11 @@ impl KafkaString {
         self.0.as_deref()
     }
 
-    pub(crate) fn write_none(buffer: &mut impl BufMut) {
+    pub(crate) fn write_none<B: BufMut>(buffer: &mut B) {
         (-1i16).write(buffer);
     }
 
-    pub(crate) fn read_inner(buffer: &mut impl Buf) -> Option<Bytes> {
+    pub(crate) fn read_inner<B: Buf>(buffer: &mut B) -> Option<Bytes> {
         let sz = i16::read(buffer);
         if sz < 0 {
             return None;
@@ -25,7 +25,7 @@ impl KafkaString {
         Some(value)
     }
 
-    pub(crate) fn write_inner(buffer: &mut impl BufMut, data: Option<&[u8]>) {
+    pub(crate) fn write_inner<B: BufMut>(buffer: &mut B, data: Option<&[u8]>) {
         if let Some(data) = data {
             let sz = data.len() as i16;
             sz.write(buffer);
@@ -46,12 +46,12 @@ impl From<Option<&str>> for KafkaString {
     }
 }
 impl Readable for KafkaString {
-    fn read(buffer: &mut impl Buf) -> Self {
+    fn read<B: Buf>(buffer: &mut B) -> Self {
         Self::read_inner(buffer).into()
     }
 }
 impl Writable for KafkaString {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         Self::write_inner(buffer, self.value());
     }
 }
@@ -63,12 +63,12 @@ impl CompactKafkaString {
         self.0.as_deref()
     }
 
-    pub(crate) fn write_none(buffer: &mut impl BufMut) {
+    pub(crate) fn write_none<B: BufMut>(buffer: &mut B) {
         0u8.write(buffer);
     }
 
-    pub(crate) fn read_result_inner(
-        buffer: &mut impl Buf,
+    pub(crate) fn read_result_inner<B: Buf>(
+        buffer: &mut B,
     ) -> Result<Option<Bytes>, protocol::Error> {
         let sz = read_unsigned_varint(buffer)?;
         if sz == 0 {
@@ -83,7 +83,7 @@ impl CompactKafkaString {
         Ok(Some(value))
     }
 
-    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: Option<&[u8]>) {
+    pub(crate) fn write_inner<B: BufMut>(buffer: &mut B, value: Option<&[u8]>) {
         if let Some(value) = value {
             let sz = value.len() as u32 + 1;
             write_unsigned_varint(buffer, sz);
@@ -104,12 +104,12 @@ impl From<Option<&str>> for CompactKafkaString {
     }
 }
 impl ReadableResult for CompactKafkaString {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         Self::read_result_inner(buffer).map(Self)
     }
 }
 impl Writable for CompactKafkaString {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         Self::write_inner(buffer, self.value());
     }
 }

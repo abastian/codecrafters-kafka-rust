@@ -23,14 +23,14 @@ impl TaggedField {
     }
 }
 impl ReadableResult for TaggedField {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         let key = read_unsigned_varint(buffer)?;
         let data = buffer.copy_to_bytes(key as usize);
         Ok(Self { key, data })
     }
 }
 impl Writable for TaggedField {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         write_unsigned_varint(buffer, self.key);
         buffer.put_slice(self.data.as_ref());
     }
@@ -47,8 +47,8 @@ impl TaggedFields {
         &self.0
     }
 
-    pub(crate) fn read_result_inner(
-        buffer: &mut impl Buf,
+    pub(crate) fn read_result_inner<B: Buf>(
+        buffer: &mut B,
     ) -> Result<Vec<TaggedField>, protocol::Error> {
         let sz = read_unsigned_varint(buffer)?;
         let mut result = Vec::with_capacity(sz as usize);
@@ -60,7 +60,7 @@ impl TaggedFields {
         Ok(result)
     }
 
-    pub(crate) fn write_inner(buffer: &mut impl BufMut, values: &[TaggedField]) {
+    pub(crate) fn write_inner<B: BufMut>(buffer: &mut B, values: &[TaggedField]) {
         let sz = values.len() as u32;
         let mut data = values.to_vec();
         data.sort_by_key(|tf| tf.key);
@@ -71,17 +71,17 @@ impl TaggedFields {
         }
     }
 
-    pub(crate) fn write_empty(buffer: &mut impl BufMut) {
+    pub(crate) fn write_empty<B: BufMut>(buffer: &mut B) {
         0u8.write(buffer);
     }
 }
 impl ReadableResult for TaggedFields {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         Self::read_result_inner(buffer).map(Self)
     }
 }
 impl Writable for TaggedFields {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         Self::write_inner(buffer, self.value());
     }
 }

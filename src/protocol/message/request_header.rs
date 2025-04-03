@@ -1,4 +1,4 @@
-use bytes::Bytes;
+use bytes::{Buf, BufMut, Bytes};
 
 use crate::protocol::{
     self,
@@ -78,7 +78,7 @@ impl RequestHeader {
     }
 }
 impl ReadableResult for RequestHeader {
-    fn read_result(buffer: &mut impl bytes::Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         let request_api_key = i16::read(buffer);
         let request_api_version = i16::read(buffer);
         let correlation_id = i32::read(buffer);
@@ -101,7 +101,7 @@ impl ReadableResult for RequestHeader {
     }
 }
 impl Writable for RequestHeader {
-    fn write(&self, buffer: &mut impl bytes::BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         self.request_api_key.write(buffer);
         self.request_api_version.write(buffer);
         self.correlation_id.write(buffer);

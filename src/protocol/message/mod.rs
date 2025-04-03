@@ -91,7 +91,7 @@ pub enum KafkaResponse {
     DescribeTopicPartitions(DescribeTopicPartitionsResponse),
 }
 
-pub fn read_request(buffer: &mut impl Buf) -> Result<(RequestHeader, KafkaRequest), super::Error> {
+pub fn read_request<B: Buf>(buffer: &mut B) -> Result<(RequestHeader, KafkaRequest), super::Error> {
     if buffer.remaining() < 4 {
         return Err(super::Error::BufferUnderflow);
     }
@@ -156,8 +156,8 @@ pub fn process_request(request: KafkaRequest) -> Result<KafkaResponse, super::Er
     }
 }
 
-pub fn write_response(
-    buffer: &mut impl BufMut,
+pub fn write_response<B: BufMut>(
+    buffer: &mut B,
     request_header: RequestHeader,
     response: KafkaResponse,
 ) -> Result<(), super::Error> {

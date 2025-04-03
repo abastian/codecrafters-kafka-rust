@@ -11,7 +11,7 @@ impl<T> Array<T> {
         self.0.as_deref()
     }
 
-    pub(crate) fn write_none(buffer: &mut impl BufMut) {
+    pub(crate) fn write_none<B: BufMut>(buffer: &mut B) {
         (-1i8).write(buffer);
     }
 }
@@ -19,7 +19,7 @@ impl<T> Array<T>
 where
     T: Readable,
 {
-    pub(crate) fn read_inner(buffer: &mut impl Buf) -> Option<Vec<T>> {
+    pub(crate) fn read_inner<B: Buf>(buffer: &mut B) -> Option<Vec<T>> {
         let sz = i32::read(buffer);
         if sz < 0 {
             return None;
@@ -39,8 +39,8 @@ impl<T> Array<T>
 where
     T: ReadableVersion,
 {
-    pub(crate) fn read_version_inner(
-        buffer: &mut impl Buf,
+    pub(crate) fn read_version_inner<B: Buf>(
+        buffer: &mut B,
         version: i16,
     ) -> Result<Option<Vec<T>>, protocol::Error> {
         let sz = i32::read(buffer);
@@ -62,7 +62,7 @@ impl<T> Array<T>
 where
     T: Writable,
 {
-    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: Option<&[T]>) {
+    pub(crate) fn write_inner<B: BufMut>(buffer: &mut B, value: Option<&[T]>) {
         if let Some(value) = value {
             (value.len() as i32).write(buffer);
             for t in value {
@@ -90,7 +90,7 @@ impl<T> Readable for Array<T>
 where
     T: Readable,
 {
-    fn read(buffer: &mut impl Buf) -> Self {
+    fn read<B: Buf>(buffer: &mut B) -> Self {
         Self(Self::read_inner(buffer))
     }
 }
@@ -98,7 +98,7 @@ impl<T> ReadableVersion for Array<T>
 where
     T: ReadableVersion,
 {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         Ok(Self(Self::read_version_inner(buffer, version)?))
     }
 }
@@ -106,7 +106,7 @@ impl<T> Writable for Array<T>
 where
     T: Writable,
 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         Self::write_inner(buffer, self.value());
     }
 }
@@ -118,7 +118,7 @@ impl<T> CompactArray<T> {
         self.0.as_deref()
     }
 
-    pub(crate) fn write_none(buffer: &mut impl BufMut) {
+    pub(crate) fn write_none<B: BufMut>(buffer: &mut B) {
         0u8.write(buffer);
     }
 }
@@ -126,7 +126,7 @@ impl<T> CompactArray<T>
 where
     T: Readable,
 {
-    pub(crate) fn read_inner(buffer: &mut impl Buf) -> Result<Option<Vec<T>>, protocol::Error> {
+    pub(crate) fn read_inner<B: Buf>(buffer: &mut B) -> Result<Option<Vec<T>>, protocol::Error> {
         let sz = read_unsigned_varint(buffer)?;
         if sz == 0 {
             return Ok(Some(vec![]));
@@ -143,8 +143,8 @@ impl<T> CompactArray<T>
 where
     T: ReadableResult,
 {
-    pub(crate) fn read_result_inner(
-        buffer: &mut impl Buf,
+    pub(crate) fn read_result_inner<B: Buf>(
+        buffer: &mut B,
     ) -> Result<Option<Vec<T>>, protocol::Error> {
         let sz = read_unsigned_varint(buffer)?;
         if sz == 0 {
@@ -166,8 +166,8 @@ impl<T> CompactArray<T>
 where
     T: ReadableVersion,
 {
-    pub(crate) fn read_version_inner(
-        buffer: &mut impl Buf,
+    pub(crate) fn read_version_inner<B: Buf>(
+        buffer: &mut B,
         version: i16,
     ) -> Result<Option<Vec<T>>, protocol::Error> {
         let sz = read_unsigned_varint(buffer)?;
@@ -190,7 +190,7 @@ impl<T> CompactArray<T>
 where
     T: Writable,
 {
-    pub(crate) fn write_inner(buffer: &mut impl BufMut, value: Option<&[T]>) {
+    pub(crate) fn write_inner<B: BufMut>(buffer: &mut B, value: Option<&[T]>) {
         if let Some(value) = value {
             let sz = value.len();
             write_unsigned_varint(buffer, sz as u32 + 1);
@@ -220,7 +220,7 @@ impl<T> ReadableResult for CompactArray<T>
 where
     T: ReadableResult,
 {
-    fn read_result(buffer: &mut impl Buf) -> Result<Self, protocol::Error> {
+    fn read_result<B: Buf>(buffer: &mut B) -> Result<Self, protocol::Error> {
         Ok(Self(Self::read_result_inner(buffer)?))
     }
 }
@@ -228,7 +228,7 @@ impl<T> ReadableVersion for CompactArray<T>
 where
     T: ReadableVersion,
 {
-    fn read_version(buffer: &mut impl Buf, version: i16) -> Result<Self, protocol::Error> {
+    fn read_version<B: Buf>(buffer: &mut B, version: i16) -> Result<Self, protocol::Error> {
         Ok(Self(Self::read_version_inner(buffer, version)?))
     }
 }
@@ -236,7 +236,7 @@ impl<T> Writable for CompactArray<T>
 where
     T: Writable,
 {
-    fn write(&self, buffer: &mut impl BufMut) {
+    fn write<B: BufMut>(&self, buffer: &mut B) {
         Self::write_inner(buffer, self.value());
     }
 }
