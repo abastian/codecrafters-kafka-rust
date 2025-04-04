@@ -502,9 +502,14 @@ impl ReadableVersion for Request {
         let isolation_level = i8::read(buffer);
         let session_id = if version >= 7 { i32::read(buffer) } else { 0 };
         let session_epoch = if version >= 7 { i32::read(buffer) } else { -1 };
-        let topics = CompactArray::<FetchTopic>::read_version_inner(buffer, version)?.ok_or(
-            protocol::Error::IllegalArgument("non-nullable field topics was serialized as null"),
-        )?;
+        let topics = if version <= 11 {
+            Array::<FetchTopic>::read_version_inner(buffer, version)
+        } else {
+            CompactArray::<FetchTopic>::read_version_inner(buffer, version)
+        }?
+        .ok_or(protocol::Error::IllegalArgument(
+            "non-nullable field topics was serialized as null",
+        ))?;
         let forgotten_topics_data = if version >= 7 {
             Some(
                 if version <= 11 {
