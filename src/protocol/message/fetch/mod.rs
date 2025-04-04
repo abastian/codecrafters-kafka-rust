@@ -46,8 +46,8 @@ pub fn process_request(
             Some(topic_metadata) => {
                 let partitions = {
                     let mut values = Vec::new();
-                    for partition in topic_metadata.partitions() {
-                        let partition_index = partition.id();
+                    for partition in topic_req.partitions() {
+                        let partition_index = partition.partition();
                         let rel_log_path = format!(
                             "{}-{}/00000000000000000000.log",
                             topic_metadata.name(),
